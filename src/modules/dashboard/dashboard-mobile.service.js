@@ -141,8 +141,17 @@ export async function getMobileDashboard(userId) {
           where: {
             userId,
             status: LeaveStatus.APPROVED,
-            startDate: { lte: new Date(today) },
-            endDate: { gte: new Date(today) },
+            OR: [
+              {
+                approvedStartDate: null,
+                startDate: { lte: new Date(today) },
+                endDate: { gte: new Date(today) },
+              },
+              {
+                approvedStartDate: { lte: new Date(today) },
+                approvedEndDate: { gte: new Date(today) },
+              },
+            ],
           },
         });
   if (todayLeave) {

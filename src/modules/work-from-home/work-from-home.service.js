@@ -47,9 +47,11 @@ function buildLeaveConflictDates(selectedDates, approvedLeaves) {
   const selectedEndDate = selectedDates[selectedDates.length - 1];
 
   for (const leave of approvedLeaves) {
+    const leaveStartDate = toDateString(leave.approvedStartDate ?? leave.startDate);
+    const leaveEndDate = toDateString(leave.approvedEndDate ?? leave.endDate);
     const overlappingRange = intersectDateRanges(
-      leave.startDate,
-      leave.endDate,
+      leaveStartDate,
+      leaveEndDate,
       selectedStartDate,
       selectedEndDate,
     );
@@ -146,10 +148,24 @@ async function validateWorkFromHomeCreateDates(userId, dates, db) {
       where: {
         userId,
         status: LeaveStatus.APPROVED,
-        startDate: { lte: new Date(endDate) },
-        endDate: { gte: new Date(startDate) },
+        OR: [
+          {
+            approvedStartDate: null,
+            startDate: { lte: new Date(endDate) },
+            endDate: { gte: new Date(startDate) },
+          },
+          {
+            approvedStartDate: { lte: new Date(endDate) },
+            approvedEndDate: { gte: new Date(startDate) },
+          },
+        ],
       },
-      select: { startDate: true, endDate: true },
+      select: {
+        startDate: true,
+        endDate: true,
+        approvedStartDate: true,
+        approvedEndDate: true,
+      },
     }),
   ]);
 

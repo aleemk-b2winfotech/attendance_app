@@ -42,6 +42,16 @@ enum LeaveStatus {
   CANCELLED
 }
 
+enum LeaveThreadMessageType {
+  REQUEST
+  COMMENT
+  PROPOSAL
+  ACCEPTANCE
+  DIRECT_APPROVAL
+  REJECTION
+  CANCELLATION
+}
+
 enum DeviceChangeStatus {
   PENDING
   APPROVED
@@ -89,6 +99,7 @@ model User {
   regularizationActions      AttendanceRegularization[] @relation("RegularizationAction")
   leaveRequests              LeaveRequest[]             @relation("UserLeaveRequest")
   leaveActions               LeaveRequest[]             @relation("LeaveAction")
+  leaveThreadMessages        LeaveThreadMessage[]       @relation("LeaveThreadActor")
   deviceChangeRequests       DeviceChangeRequest[]      @relation("UserDeviceChange")
   deviceChangeActions        DeviceChangeRequest[]      @relation("DeviceChangeAction")
   holidaysCreated            Holiday[]                  @relation("HolidayCreatedBy")
@@ -196,6 +207,9 @@ model LeaveRequest {
   startDate       DateTime    @map("start_date") @db.Date
   endDate         DateTime    @map("end_date") @db.Date
   workingDayCount Int         @map("working_day_count")
+  approvedStartDate       DateTime?   @map("approved_start_date") @db.Date
+  approvedEndDate         DateTime?   @map("approved_end_date") @db.Date
+  approvedWorkingDayCount Int?        @map("approved_working_day_count")
   reason          String      @db.Text
   status          LeaveStatus @default(PENDING)
   actionByUserId  String?     @map("action_by_user_id") @db.Uuid
@@ -207,10 +221,34 @@ model LeaveRequest {
   user     User  @relation("UserLeaveRequest", fields: [userId], references: [id])
   actionBy User? @relation("LeaveAction", fields: [actionByUserId], references: [id])
   attendanceSummaries AttendanceSummary[]
+  threadMessages      LeaveThreadMessage[]
 
   @@index([userId, status])
   @@index([startDate, endDate])
   @@map("leave_requests")
+}
+
+model LeaveThreadMessage {
+  id                         String                 @id @default(uuid()) @db.Uuid
+  leaveRequestId             String                 @map("leave_request_id") @db.Uuid
+  actorUserId                String                 @map("actor_user_id") @db.Uuid
+  messageType                LeaveThreadMessageType @map("message_type")
+  message                    String?                @db.Text
+  proposedStartDate          DateTime?              @map("proposed_start_date") @db.Date
+  proposedEndDate            DateTime?              @map("proposed_end_date") @db.Date
+  proposedWorkingDayCount    Int?                   @map("proposed_working_day_count")
+  acceptedThreadMessageId    String?                @map("accepted_thread_message_id") @db.Uuid
+  createdAt                  DateTime               @default(now()) @map("created_at") @db.Timestamptz()
+
+  leaveRequest          LeaveRequest         @relation(fields: [leaveRequestId], references: [id])
+  actor                 User                 @relation("LeaveThreadActor", fields: [actorUserId], references: [id])
+  acceptedThreadMessage LeaveThreadMessage?  @relation("AcceptedLeaveThreadMessage", fields: [acceptedThreadMessageId], references: [id], onDelete: SetNull)
+  acceptedByMessages    LeaveThreadMessage[] @relation("AcceptedLeaveThreadMessage")
+
+  @@index([leaveRequestId, createdAt])
+  @@index([actorUserId])
+  @@index([acceptedThreadMessageId])
+  @@map("leave_thread_messages")
 }
 
 model DeviceChangeRequest {

@@ -40,6 +40,14 @@ function summaryWhere(userId, date) {
   };
 }
 
+function getApprovedLeaveStartDate(leaveRequest) {
+  return toDateString(leaveRequest.approvedStartDate ?? leaveRequest.startDate);
+}
+
+function getApprovedLeaveEndDate(leaveRequest) {
+  return toDateString(leaveRequest.approvedEndDate ?? leaveRequest.endDate);
+}
+
 function mapOverrideStatusToSummaryStatus(overrideStatus) {
   switch (overrideStatus) {
     case OverrideStatus.PRESENT:
@@ -195,13 +203,15 @@ export function getAggregateWorkedMinutes(date, summary) {
 }
 
 async function getEffectiveApprovedLeaveDates(leaveRequest, db = getPrisma()) {
+  const startDate = getApprovedLeaveStartDate(leaveRequest);
+  const endDate = getApprovedLeaveEndDate(leaveRequest);
   const leaveDates = dateRange(
-    toDateString(leaveRequest.startDate),
-    toDateString(leaveRequest.endDate),
+    startDate,
+    endDate,
   );
   const holidayDates = await getHolidayDatesInRange(
-    leaveRequest.startDate,
-    leaveRequest.endDate,
+    startDate,
+    endDate,
     db,
   );
 
@@ -271,12 +281,14 @@ function buildSummaryRows({
   }
 
   for (const leave of approvedLeaves) {
+    const leaveStartDate = getApprovedLeaveStartDate(leave);
+    const leaveEndDate = getApprovedLeaveEndDate(leave);
     const overlappingRange =
       rangeStart && rangeEnd
-        ? intersectDateRanges(leave.startDate, leave.endDate, rangeStart, rangeEnd)
+        ? intersectDateRanges(leaveStartDate, leaveEndDate, rangeStart, rangeEnd)
         : {
-          startDate: toDateString(leave.startDate),
-          endDate: toDateString(leave.endDate),
+          startDate: leaveStartDate,
+          endDate: leaveEndDate,
         };
 
     if (!overlappingRange) {
@@ -382,8 +394,16 @@ async function buildRangeSummaryRows(
       where: {
         ...(whereUserId && { userId: whereUserId }),
         status: LeaveStatus.APPROVED,
-        startDate: { lte: new Date(end) },
-        endDate: { gte: new Date(start) },
+        OR: [
+          {
+            startDate: { lte: new Date(end) },
+            endDate: { gte: new Date(start) },
+          },
+          {
+            approvedStartDate: { lte: new Date(end) },
+            approvedEndDate: { gte: new Date(start) },
+          },
+        ],
       },
     }),
     db.attendanceSummary.findMany({

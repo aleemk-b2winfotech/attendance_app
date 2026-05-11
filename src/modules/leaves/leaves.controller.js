@@ -29,7 +29,7 @@ export async function listLeaveRequestsWeb(req, res) {
     sendSuccess(res, result.items, result.meta);
 }
 export async function getLeaveRequestWeb(req, res) {
-    const result = await leavesService.getLeaveRequestById(null, req.params.leaveRequestId);
+    const result = await leavesService.getLeaveRequestByIdWeb(req.user.roles, req.user.sub, req.params.leaveRequestId);
     sendSuccess(res, result);
 }
 export async function approveLeaveRequest(req, res) {
@@ -39,4 +39,34 @@ export async function approveLeaveRequest(req, res) {
 export async function rejectLeaveRequest(req, res) {
     const result = await leavesService.rejectLeaveRequest(req.user.roles, req.user.sub, req.params.leaveRequestId, req.body.actionNote);
     sendSuccess(res, result, undefined, 'Leave request rejected');
+}
+
+export async function getMyLeaveRequestThread(req, res) {
+    const result = await leavesService.getMyLeaveRequestThread(req.user.sub, req.params.leaveRequestId);
+    sendSuccess(res, result);
+}
+
+export async function createMyLeaveThreadMessage(req, res) {
+    const result = await leavesService.createMyLeaveThreadMessage(req.user.sub, req.params.leaveRequestId, req.body);
+    sendCreated(res, result, 'Leave thread message created');
+}
+
+export async function acceptMyLeaveThreadProposal(req, res) {
+    const result = await leavesService.acceptMyLeaveThreadProposal(req.user.sub, req.params.leaveRequestId, req.params.messageId);
+    sendSuccess(res, result, undefined, 'Leave proposal accepted');
+}
+
+export async function getLeaveRequestThreadWeb(req, res) {
+    const result = await leavesService.getLeaveRequestThreadWeb(req.user.roles, req.user.sub, req.params.leaveRequestId);
+    sendSuccess(res, result);
+}
+
+export async function createLeaveThreadMessageWeb(req, res) {
+    const result = await leavesService.createLeaveThreadMessageWeb(req.user.roles, req.user.sub, req.params.leaveRequestId, req.body);
+    sendCreated(res, result, 'Leave thread message created');
+}
+
+export async function acceptLeaveThreadProposalWeb(req, res) {
+    const result = await leavesService.acceptLeaveThreadProposalWeb(req.user.roles, req.user.sub, req.params.leaveRequestId, req.params.messageId);
+    sendSuccess(res, result, undefined, 'Leave proposal accepted');
 }

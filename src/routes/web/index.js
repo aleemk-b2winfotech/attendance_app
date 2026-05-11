@@ -28,6 +28,7 @@ import * as leavesController from "../../modules/leaves/leaves.controller.js";
 import {
   leaveActionSchema,
   leaveRejectSchema,
+  leaveThreadMessageSchema,
   listLeaveRequestsQuerySchema,
 } from "../../modules/leaves/leaves.schemas.js";
 import * as deviceChangesController from "../../modules/device-changes/device-changes.controller.js";
@@ -173,6 +174,22 @@ router.get(
   "/leave-requests/:leaveRequestId",
   requireRoles(Role.MANAGER, Role.ADMIN),
   leavesController.getLeaveRequestWeb,
+);
+router.get(
+  "/leave-requests/:leaveRequestId/thread",
+  requireRoles(Role.MANAGER, Role.ADMIN),
+  leavesController.getLeaveRequestThreadWeb,
+);
+router.post(
+  "/leave-requests/:leaveRequestId/thread/messages",
+  requireRoles(Role.MANAGER, Role.ADMIN),
+  validate(leaveThreadMessageSchema),
+  leavesController.createLeaveThreadMessageWeb,
+);
+router.patch(
+  "/leave-requests/:leaveRequestId/thread/messages/:messageId/accept",
+  requireRoles(Role.MANAGER, Role.ADMIN),
+  leavesController.acceptLeaveThreadProposalWeb,
 );
 router.patch(
   "/leave-requests/:leaveRequestId/approve",

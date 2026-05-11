@@ -22,6 +22,7 @@ import {
 import * as leavesController from "../../modules/leaves/leaves.controller.js";
 import {
   createLeaveRequestSchema,
+  leaveThreadMessageSchema,
 } from "../../modules/leaves/leaves.schemas.js";
 import * as deviceChangesController from "../../modules/device-changes/device-changes.controller.js";
 import {
@@ -84,6 +85,19 @@ router.get("/me/leave-requests", leavesController.getMyLeaveRequests);
 router.get(
   "/me/leave-requests/:leaveRequestId",
   leavesController.getMyLeaveRequest,
+);
+router.get(
+  "/me/leave-requests/:leaveRequestId/thread",
+  leavesController.getMyLeaveRequestThread,
+);
+router.post(
+  "/me/leave-requests/:leaveRequestId/thread/messages",
+  validate(leaveThreadMessageSchema),
+  leavesController.createMyLeaveThreadMessage,
+);
+router.patch(
+  "/me/leave-requests/:leaveRequestId/thread/messages/:messageId/accept",
+  leavesController.acceptMyLeaveThreadProposal,
 );
 router.post(
   "/me/leave-requests",
