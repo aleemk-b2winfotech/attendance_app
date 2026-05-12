@@ -18,7 +18,7 @@ async function initAdmin() {
     data: {
       fullName: "Samiksha Bhuvad",
       email: "samiksha.bhuvad@b2winfotech.ai",
-      roles: [Role.ADMIN],
+      role: Role.ADMIN,
       isActive: true,
     },
   });

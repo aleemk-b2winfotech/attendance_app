@@ -1,5 +1,4 @@
 import {
-  Role,
   AttendanceSummaryStatus,
   AttendanceSummarySource,
 } from "@prisma/client";
@@ -9,6 +8,7 @@ import {
   isPast,
   toDateString,
   isManagerScoped,
+  appendNonAdminUserFilter,
 } from "../../common/index.js";
 import { getEffectiveSummaryWorkedMinutes } from "./attendance-summary.service.js";
 
@@ -24,8 +24,8 @@ export {
 export function buildAttendanceScopeWhere(callerRoles, callerId, search) {
   const where = {
     isActive: true,
-    NOT: { roles: { has: Role.ADMIN } },
   };
+  appendNonAdminUserFilter(where);
   if (isManagerScoped(callerRoles)) {
     where.managerUserId = callerId;
   }

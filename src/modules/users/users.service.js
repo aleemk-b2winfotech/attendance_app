@@ -8,53 +8,74 @@ import {
   buildManagerScopeWhere,
   assertDirectReportAccess,
   isManagerScoped,
+  roleFromEffectiveRolesOrRole,
+  assertCanAssignRole,
+  withEffectiveRoles,
+  withEffectiveRolesMany,
 } from "../../common/index.js";
 import { paginate, paginationMeta } from "../../common/pagination.js";
 import { env } from "../../config/env.js";
-// Business rule: ADMIN is exclusive and cannot be mixed with operational roles.
-const INVALID_ROLE_COMBOS = [
-  [Role.EMPLOYEE, Role.ADMIN],
-  [Role.MANAGER, Role.ADMIN],
-];
-function validateRoleCombination(roles) {
-  for (const combo of INVALID_ROLE_COMBOS) {
-    if (combo.every((r) => roles.includes(r))) {
-      throw new BadRequestError(
-        `Invalid role combination: ${combo.join(" + ")} is not allowed`,
-      );
-    }
+
+function applyRoleFilter(where, role) {
+  if (!role) {
+    return;
+  }
+  if (role === Role.EMPLOYEE) {
+    where.AND = [
+      ...(where.AND || []),
+      { OR: [{ role: null }, { role: Role.EMPLOYEE }] },
+    ];
+    return;
+  }
+  where.role = role;
+}
+
+function getRequestedRole(data) {
+  return roleFromEffectiveRolesOrRole(data);
+}
+
+function assertRoleAssignable(callerRoles, targetRole) {
+  assertCanAssignRole(callerRoles, targetRole);
+}
+
+async function assertValidManager(managerUserId) {
+  if (!managerUserId) {
+    return;
+  }
+
+  const prisma = getPrisma();
+  const manager = await prisma.user.findUnique({
+    where: { id: managerUserId },
+  });
+  if (!manager || manager.role !== Role.MANAGER) {
+    throw new BadRequestError("Invalid manager user ID");
   }
 }
+
 /**
  * Lists users visible to caller with optional search/role/activity filters.
  *
  * Authorization scope:
- * - ADMIN: all users
- * - MANAGER (non-admin): direct reports only
+ * - ADMIN: all users, including admins
+ * - MANAGER (non-admin): direct non-admin reports only
  */
 export async function listUsers(callerRoles, callerId, filters) {
   const prisma = getPrisma();
   const where = {};
-  // Non-admin managers are tenant-scoped to their direct-report subtree (one level).
+
   Object.assign(where, buildManagerScopeWhere(callerRoles, callerId));
-  // Text search spans both name and email for flexible admin lookup.
+
   if (filters.search) {
     where.OR = [
       { fullName: { contains: filters.search, mode: "insensitive" } },
       { email: { contains: filters.search, mode: "insensitive" } },
     ];
   }
-  if (filters.role) {
-    where.roles = { has: filters.role };
-  }
+  applyRoleFilter(where, filters.role);
   if (filters.isActive !== undefined) {
     where.isActive = filters.isActive;
   }
-  // Prisma list-enum filters do not support nested `not`, so exclude admins
-  // with a top-level NOT while preserving any explicit role filter above.
-  where.NOT = { roles: { has: Role.ADMIN } };
 
-  // Query count + page in parallel for latency.
   const [total, users] = await Promise.all([
     prisma.user.count({ where }),
     prisma.user.findMany({
@@ -63,7 +84,7 @@ export async function listUsers(callerRoles, callerId, filters) {
         id: true,
         fullName: true,
         email: true,
-        roles: true,
+        role: true,
         isActive: true,
         managerUserId: true,
         manager: { select: { id: true, fullName: true } },
@@ -74,10 +95,11 @@ export async function listUsers(callerRoles, callerId, filters) {
     }),
   ]);
   return {
-    items: users,
+    items: withEffectiveRolesMany(users),
     meta: paginationMeta(total, filters.page, filters.limit),
   };
 }
+
 /**
  * Fetches one user with manager/profile details.
  * Enforces same manager scope rule as list endpoint.
@@ -92,101 +114,90 @@ export async function getUserById(callerRoles, callerId, userId) {
     },
   });
   if (!user) throw new NotFoundError("User");
-  // Scope check mirrors listUsers to avoid privilege escalation by direct ID lookup.
-  assertDirectReportAccess(callerRoles, callerId, user, 'view');
-  return user;
+
+  assertDirectReportAccess(callerRoles, callerId, user, "view");
+  return withEffectiveRoles(user);
 }
+
 /**
  * Creates a user and its initial attendance profile.
  *
  * Guardrails:
- * - invalid role combinations rejected
- * - managers can create only employees under themselves
+ * - role arrays are converted to nullable privilege role
+ * - callers cannot assign a role above their own
+ * - managers can create only direct non-admin reports
  * - email uniqueness enforced
  * - managerUserId (if given) must reference a manager
  */
 export async function createUser(callerRoles, callerId, data) {
   const prisma = getPrisma();
-  validateRoleCombination(data.roles);
-  // Manager bootstrap guard: they can only onboard employees under themselves.
+  const requestedRole = getRequestedRole(data) ?? null;
+
+  assertRoleAssignable(callerRoles, requestedRole);
+
   if (isManagerScoped(callerRoles)) {
-    if (data.roles.includes(Role.ADMIN)) {
-      throw new ForbiddenError("Managers can only create EMPLOYEE or MANAGER users");
-    }
     data.managerUserId = callerId;
   }
-  // Explicit pre-check provides friendly conflict error before DB unique exception.
+
   const existing = await prisma.user.findUnique({
     where: { email: data.email },
   });
   if (existing) throw new ConflictError("Email already registered");
-  // Ensure manager reference points to a user who actually has MANAGER role.
-  if (data.managerUserId) {
-    const manager = await prisma.user.findUnique({
-      where: { id: data.managerUserId },
-    });
-    if (!manager || !manager.roles.includes(Role.MANAGER)) {
-      throw new BadRequestError("Invalid manager user ID");
-    }
-  }
-  //final check whether email is of companies domain
-  const emailDomain = data.email.split('@')[1];
+
+  await assertValidManager(data.managerUserId);
+
+  const emailDomain = data.email.split("@")[1];
   if (emailDomain !== env().COMPANY_DOMAIN) {
     throw new BadRequestError(`Email must be of domain ${env().COMPANY_DOMAIN}`);
   }
 
-
-  // Persist user first; profile follows to satisfy FK with generated user.id.
   const user = await prisma.user.create({
     data: {
       fullName: data.fullName,
       email: data.email,
-      roles: data.roles,
+      role: requestedRole,
       managerUserId: data.managerUserId || null,
     },
     include: { manager: { select: { id: true, fullName: true } } },
   });
-  // Create profile eagerly so later attendance/device settings have a stable row.
   await prisma.attendanceProfile.create({ data: { userId: user.id } });
-  return user;
+  return withEffectiveRoles(user);
 }
+
 /**
  * Updates mutable user fields with role/scope restrictions.
  *
  * Manager limitations:
- * - can update only direct reports
- * - cannot modify roles or manager assignment
+ * - can update only direct non-admin reports
+ * - cannot reassign manager
+ * - cannot assign admin
  */
 export async function updateUser(callerRoles, callerId, userId, data) {
   const prisma = getPrisma();
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) throw new NotFoundError("User");
-  // Manager scope + mutation restrictions.
+
   if (isManagerScoped(callerRoles)) {
-    assertDirectReportAccess(callerRoles, callerId, user, 'update');
-    // Managers cannot change roles or reassign manager
-    if (data.roles || data.managerUserId !== undefined) {
-      throw new ForbiddenError(
-        "Managers cannot change roles or reassign manager",
-      );
+    assertDirectReportAccess(callerRoles, callerId, user, "update");
+    if (data.managerUserId !== undefined) {
+      throw new ForbiddenError("Managers cannot reassign manager");
     }
   }
-  if (data.roles) {
-    validateRoleCombination(data.roles);
+
+  const requestedRole = getRequestedRole(data);
+  if (requestedRole !== undefined) {
+    assertRoleAssignable(callerRoles, requestedRole);
   }
+
   if (data.managerUserId) {
-    const manager = await prisma.user.findUnique({
-      where: { id: data.managerUserId },
-    });
-    if (!manager || !manager.roles.includes(Role.MANAGER)) {
-      throw new BadRequestError("Invalid manager user ID");
-    }
+    await assertValidManager(data.managerUserId);
   }
-  return prisma.user.update({
+
+  const updated = await prisma.user.update({
     where: { id: userId },
     data: {
       ...(data.fullName !== undefined && { fullName: data.fullName }),
-      ...(data.roles !== undefined && { roles: data.roles }),
+      ...(requestedRole !== undefined && { role: requestedRole }),
       ...(data.managerUserId !== undefined && {
         managerUserId: data.managerUserId,
       }),
@@ -194,7 +205,9 @@ export async function updateUser(callerRoles, callerId, userId, data) {
     },
     include: { manager: { select: { id: true, fullName: true } } },
   });
+  return withEffectiveRoles(updated);
 }
+
 /**
  * Returns attendance profile for a user, creating one if missing.
  * Auto-create keeps older data migrations from breaking profile UI.
@@ -203,8 +216,8 @@ export async function getAttendanceProfile(callerRoles, callerId, userId) {
   const prisma = getPrisma();
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) throw new NotFoundError("User");
-  assertDirectReportAccess(callerRoles, callerId, user, 'view');
-  // Self-heal missing profile rows for legacy users or partial migrations.
+  assertDirectReportAccess(callerRoles, callerId, user, "view");
+
   let profile = await prisma.attendanceProfile.findUnique({
     where: { userId },
     include: { updatedBy: { select: { id: true, fullName: true } } },
@@ -217,6 +230,7 @@ export async function getAttendanceProfile(callerRoles, callerId, userId) {
   }
   return profile;
 }
+
 /**
  * Upserts attendance/geofence profile.
  * `updatedByUserId` is tracked for audit visibility.
@@ -230,8 +244,8 @@ export async function updateAttendanceProfile(
   const prisma = getPrisma();
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) throw new NotFoundError("User");
-  assertDirectReportAccess(callerRoles, callerId, user, 'update');
-  // Upsert keeps this endpoint idempotent and handles first-time profile setup.
+  assertDirectReportAccess(callerRoles, callerId, user, "update");
+
   return prisma.attendanceProfile.upsert({
     where: { userId },
     create: {
@@ -250,6 +264,7 @@ export async function updateAttendanceProfile(
     include: { updatedBy: { select: { id: true, fullName: true } } },
   });
 }
+
 /**
  * Returns profile for currently authenticated user.
  * Includes manager summary and essential attendance profile fields.
@@ -271,6 +286,5 @@ export async function getMyProfile(userId) {
     },
   });
   if (!user) throw new NotFoundError("User");
-  return user;
+  return withEffectiveRoles(user);
 }
-//# sourceMappingURL=users.service.js.map

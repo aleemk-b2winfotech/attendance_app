@@ -140,7 +140,6 @@ export async function getWebAttendanceOverview(callerRoles, callerId, filters) {
         id: true,
         fullName: true,
         email: true,
-        roles: true,
         createdAt: true,
       },
       orderBy: { fullName: "asc" },

@@ -7,6 +7,7 @@ import {
   isWeeklyOff,
   clampEndDate,
   toDateString,
+  withEffectiveRoles,
 } from "../../common/index.js";
 import { getEffectiveSummaryWorkedMinutes } from "../attendance/attendance-summary.service.js";
 import {
@@ -38,7 +39,7 @@ export async function getMobileDashboard(userId) {
       id: true,
       fullName: true,
       email: true,
-      roles: true,
+      role: true,
       createdAt: true,
       manager: { select: { id: true, fullName: true } },
     },
@@ -220,7 +221,7 @@ export async function getMobileDashboard(userId) {
   ).map((d) => toDateString(d.attendanceDate));
   
   return {
-    user,
+    user: withEffectiveRoles(user),
     todayStatus,
     monthSummary,
     pendingLeaves,

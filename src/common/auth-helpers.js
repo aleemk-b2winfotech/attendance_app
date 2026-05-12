@@ -1,5 +1,6 @@
 import { Role } from "@prisma/client";
 import { ForbiddenError } from "./errors.js";
+import { nonAdminUserWhere } from "./role-helpers.js";
 
 /**
  * Checks if caller has manager-only scope (manager but not admin).
@@ -21,7 +22,10 @@ export function isManagerScoped(callerRoles) {
  * @throws {ForbiddenError}
  */
 export function assertDirectReportAccess(callerRoles, callerId, targetUser, action = 'access') {
-  if (isManagerScoped(callerRoles) && targetUser.managerUserId !== callerId) {
+  if (
+    isManagerScoped(callerRoles) &&
+    (targetUser.managerUserId !== callerId || targetUser.role === Role.ADMIN)
+  ) {
     throw new ForbiddenError(`You can only ${action} your direct reports`);
   }
 }
@@ -36,7 +40,7 @@ export function assertDirectReportAccess(callerRoles, callerId, targetUser, acti
  */
 export function buildManagerScopeWhere(callerRoles, callerId) {
   if (isManagerScoped(callerRoles)) {
-    return { managerUserId: callerId };
+    return { managerUserId: callerId, AND: [nonAdminUserWhere()] };
   }
   return {};
 }
@@ -51,7 +55,7 @@ export function buildManagerScopeWhere(callerRoles, callerId) {
  */
 export function buildManagerScopeUserWhere(callerRoles, callerId) {
   if (isManagerScoped(callerRoles)) {
-    return { user: { managerUserId: callerId } };
+    return { user: { managerUserId: callerId, AND: [nonAdminUserWhere()] } };
   }
   return {};
 }

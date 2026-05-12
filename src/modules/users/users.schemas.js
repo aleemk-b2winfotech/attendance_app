@@ -4,12 +4,16 @@ import { Role } from '@prisma/client';
 export const createUserSchema = z.object({
     fullName: z.string().min(1).max(120),
     email: z.string().email().max(150).transform((v) => v.toLowerCase()),
-    roles: z.array(z.nativeEnum(Role)).min(1),
+    roles: z.array(z.nativeEnum(Role)).min(1).optional(),
+    role: z.nativeEnum(Role).nullable().optional(),
     managerUserId: z.string().uuid().nullable().optional(),
+}).refine((data) => data.roles || Object.prototype.hasOwnProperty.call(data, 'role'), {
+    message: 'roles or role is required',
 });
 export const updateUserSchema = z.object({
     fullName: z.string().min(1).max(120).optional(),
     roles: z.array(z.nativeEnum(Role)).min(1).optional(),
+    role: z.nativeEnum(Role).nullable().optional(),
     managerUserId: z.string().uuid().nullable().optional(),
     isActive: z.boolean().optional(),
 });

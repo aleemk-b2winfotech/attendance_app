@@ -7,9 +7,10 @@ import {
   intersectDateRanges,
   isWeeklyOff,
   toDateString,
+  appendNonAdminUserFilter,
 } from "../../common/index.js";
 import { getPrisma } from "../../config/database.js";
-import { LeaveStatus, Prisma, Role } from "@prisma/client";
+import { LeaveStatus, Prisma } from "@prisma/client";
 import { getHolidayDatesInRange } from "../holidays/holidays.helpers.js";
 import { paginate, paginationMeta } from "../../common/pagination.js";
 
@@ -116,7 +117,7 @@ async function getScopedTargetUser(callerRoles, callerId, userId, action) {
       fullName: true,
       email: true,
       managerUserId: true,
-      roles: true,
+      role: true,
     },
   });
 
@@ -125,9 +126,6 @@ async function getScopedTargetUser(callerRoles, callerId, userId, action) {
   }
 
   assertDirectReportAccess(callerRoles, callerId, user, action);
-  if (!user.roles.includes(Role.EMPLOYEE)) {
-    throw new BadRequestError("Work from home can only be assigned to employees");
-  }
   return user;
 }
 
@@ -302,9 +300,9 @@ export async function listWorkFromHomeDays(callerRoles, callerId, filters) {
   const prisma = getPrisma();
   const userWhere = {
     isActive: true,
-    roles: { has: Role.EMPLOYEE },
     ...buildManagerScopeWhere(callerRoles, callerId),
   };
+  appendNonAdminUserFilter(userWhere);
 
   if (filters.search) {
     userWhere.OR = [

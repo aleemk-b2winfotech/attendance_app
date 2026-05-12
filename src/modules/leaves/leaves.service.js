@@ -15,6 +15,8 @@ import {
   toDateString,
   buildManagerScopeUserWhere,
   assertDirectReportAccess,
+  appendNonAdminUserFilter,
+  withEffectiveRoles,
 } from "../../common/index.js";
 import { paginate, paginationMeta } from "../../common/pagination.js";
 import {
@@ -155,7 +157,7 @@ function ensurePendingLeave(leave) {
 
 function threadMessageInclude() {
   return {
-    actor: { select: { id: true, fullName: true, email: true, roles: true } },
+    actor: { select: { id: true, fullName: true, email: true, role: true } },
     acceptedThreadMessage: {
       select: {
         id: true,
@@ -168,11 +170,19 @@ function threadMessageInclude() {
   };
 }
 
+function formatThreadMessage(message) {
+  return {
+    ...message,
+    actor: withEffectiveRoles(message.actor),
+  };
+}
+
 async function createThreadMessage(db, data) {
-  return db.leaveThreadMessage.create({
+  const message = await db.leaveThreadMessage.create({
     data,
     include: threadMessageInclude(),
   });
+  return formatThreadMessage(message);
 }
 
 async function addInitialRequestThreadMessage(db, leave) {
@@ -309,7 +319,7 @@ export async function getLeaveRequestByIdWeb(
   const leave = await prisma.leaveRequest.findUnique({
     where: { id: leaveRequestId },
     include: {
-      user: { select: { id: true, fullName: true, email: true, managerUserId: true } },
+      user: { select: { id: true, fullName: true, email: true, managerUserId: true, role: true } },
       actionBy: { select: { id: true, fullName: true } },
     },
   });
@@ -361,6 +371,7 @@ export async function listLeaveRequestsWeb(callerRoles, callerId, filters) {
   const where = {};
   // Managers can act only on direct reports; admins get organization-wide view.
   Object.assign(where, buildManagerScopeUserWhere(callerRoles, callerId));
+  where.user = appendNonAdminUserFilter(where.user || {});
   if (filters.status) where.status = filters.status;
 
   if (filters.startDate || filters.endDate) {
@@ -513,11 +524,12 @@ async function getEmployeeLeaveRequest(userId, leaveRequestId) {
 
 async function listThreadMessages(leaveRequestId) {
   const prisma = getPrisma();
-  return prisma.leaveThreadMessage.findMany({
+  const messages = await prisma.leaveThreadMessage.findMany({
     where: { leaveRequestId },
     orderBy: { createdAt: "asc" },
     include: threadMessageInclude(),
   });
+  return messages.map(formatThreadMessage);
 }
 
 export async function getMyLeaveRequestThread(userId, leaveRequestId) {

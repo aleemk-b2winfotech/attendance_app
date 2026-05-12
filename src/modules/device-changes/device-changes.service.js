@@ -6,6 +6,7 @@ import {
     NotFoundError,
     buildManagerScopeUserWhere,
     assertDirectReportAccess,
+    appendNonAdminUserFilter,
 } from '../../common/index.js';
 import { paginate, paginationMeta } from '../../common/pagination.js';
 /**
@@ -58,6 +59,7 @@ export async function listDeviceChangeRequestsWeb(callerRoles, callerId, filters
     const where = {};
     // Managers can review only direct-report requests; admins can review all.
     Object.assign(where, buildManagerScopeUserWhere(callerRoles, callerId));
+    where.user = appendNonAdminUserFilter(where.user || {});
     if (filters.status)
         where.status = filters.status;
     if (filters.search) {

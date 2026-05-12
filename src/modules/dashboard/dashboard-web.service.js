@@ -1,4 +1,4 @@
-import { Role, LeaveStatus, DeviceChangeStatus } from "@prisma/client";
+import { LeaveStatus, DeviceChangeStatus } from "@prisma/client";
 import { getPrisma } from "../../config/database.js";
 import {
   businessToday,
@@ -7,6 +7,7 @@ import {
   clampEndDate,
   toDateString,
   isManagerScoped,
+  appendNonAdminUserFilter,
 } from "../../common/index.js";
 import {
   buildHolidayDateSet,
@@ -39,8 +40,8 @@ export async function getWebDashboard(
   // Keep all dashboard counters aligned to the same visible user scope.
   const userWhere = {
     isActive: true,
-    NOT: { roles: { has: Role.ADMIN } },
   };
+  appendNonAdminUserFilter(userWhere);
   if (isManagerScoped(callerRoles)) {
     userWhere.managerUserId = callerId;
   }

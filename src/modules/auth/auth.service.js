@@ -5,6 +5,7 @@ import { Portal, Role } from '@prisma/client';
 import { env } from '../../config/env.js';
 import { getPrisma } from '../../config/database.js';
 import { UnauthorizedError, ForbiddenError } from '../../common/errors.js';
+import { getEffectiveRoles } from '../../common/role-helpers.js';
 // We never store raw refresh tokens; only deterministic SHA-256 hashes.
 function hashToken(token) {
     return createHash('sha256').update(token).digest('hex');
@@ -26,7 +27,8 @@ function parseDuration(dur) {
         default: return 900;
     }
 }
-function signAccessToken(userId, email, roles, portal) {
+function signAccessToken(userId, email, role, portal) {
+    const roles = getEffectiveRoles(role);
     const payload = {
         sub: userId,
         email,
@@ -113,7 +115,8 @@ export async function loginMobile(googleToken, deviceId) {
         throw new UnauthorizedError('User not found or inactive');
     }
     // Role/portal compatibility check (defense in depth on top of route middleware).
-    if (!portalAllowedForRoles(Portal.MOBILE, user.roles)) {
+    const roles = getEffectiveRoles(user.role);
+    if (!portalAllowedForRoles(Portal.MOBILE, roles)) {
         throw new ForbiddenError('Your role does not allow mobile portal access');
     }
     /**
@@ -139,7 +142,7 @@ export async function loginMobile(googleToken, deviceId) {
         throw new ForbiddenError('Device mismatch. Please request a device change.');
     }
     // Issue short-lived bearer token and longer-lived revocable session token.
-    const accessToken = signAccessToken(user.id, user.email, user.roles, Portal.MOBILE);
+    const accessToken = signAccessToken(user.id, user.email, user.role, Portal.MOBILE);
     const refreshToken = await createRefreshToken(user.id, Portal.MOBILE);
     return {
         accessToken,
@@ -148,7 +151,7 @@ export async function loginMobile(googleToken, deviceId) {
             id: user.id,
             fullName: user.fullName,
             email: user.email,
-            roles: user.roles,
+            roles,
         },
     };
 }
@@ -170,10 +173,11 @@ export async function loginWeb(googleToken) {
     if (!user || !user.isActive) {
         throw new UnauthorizedError('User not found or inactive');
     }
-    if (!portalAllowedForRoles(Portal.WEB, user.roles)) {
+    const roles = getEffectiveRoles(user.role);
+    if (!portalAllowedForRoles(Portal.WEB, roles)) {
         throw new ForbiddenError('Your role does not allow web portal access');
     }
-    const accessToken = signAccessToken(user.id, user.email, user.roles, Portal.WEB);
+    const accessToken = signAccessToken(user.id, user.email, user.role, Portal.WEB);
     const refreshToken = await createRefreshToken(user.id, Portal.WEB);
     return {
         accessToken,
@@ -182,7 +186,7 @@ export async function loginWeb(googleToken) {
             id: user.id,
             fullName: user.fullName,
             email: user.email,
-            roles: user.roles,
+            roles,
         },
     };
 }
@@ -224,7 +228,7 @@ export async function refreshAccessToken(encodedRefreshToken) {
         where: { id: stored.id },
         data: { revokedAt: new Date(), lastUsedAt: new Date() },
     });
-    const accessToken = signAccessToken(user.id, user.email, user.roles, stored.portal);
+    const accessToken = signAccessToken(user.id, user.email, user.role, stored.portal);
     const newRefreshToken = await createRefreshToken(user.id, stored.portal);
     return { accessToken, refreshToken: newRefreshToken };
 }
