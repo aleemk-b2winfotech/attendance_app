@@ -134,7 +134,7 @@ export async function getMobileDashboard(userId) {
     };
   }
 
-  // Approved leave has final precedence
+  // Current-day approved leave blocks punch status; regularization is past-day only.
   const todayLeave =
     todaySummary?.status === AttendanceSummaryStatus.ON_LEAVE
       ? true

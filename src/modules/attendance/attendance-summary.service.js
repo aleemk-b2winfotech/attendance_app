@@ -16,10 +16,10 @@ import {
 } from "../../common/index.js";
 import { getHolidayDatesInRange } from "../holidays/holidays.helpers.js";
 
-// Keep parity with the current server behavior: LEAVE > REGULARIZATION > PUNCH.
+// Attendance reporting precedence: REGULARIZATION > LEAVE > PUNCH.
 const SOURCE_PRIORITY = {
-  [AttendanceSummarySource.LEAVE]: 3,
-  [AttendanceSummarySource.REGULARIZATION]: 2,
+  [AttendanceSummarySource.REGULARIZATION]: 3,
+  [AttendanceSummarySource.LEAVE]: 2,
   [AttendanceSummarySource.PUNCH]: 1,
 };
 
@@ -46,6 +46,27 @@ function getApprovedLeaveStartDate(leaveRequest) {
 
 function getApprovedLeaveEndDate(leaveRequest) {
   return toDateString(leaveRequest.approvedEndDate ?? leaveRequest.endDate);
+}
+
+async function findApprovedLeaveForDate(db, userId, date) {
+  const attendanceDate = new Date(date);
+  return db.leaveRequest.findFirst({
+    where: {
+      userId,
+      status: LeaveStatus.APPROVED,
+      OR: [
+        {
+          approvedStartDate: null,
+          startDate: { lte: attendanceDate },
+          endDate: { gte: attendanceDate },
+        },
+        {
+          approvedStartDate: { lte: attendanceDate },
+          approvedEndDate: { gte: attendanceDate },
+        },
+      ],
+    },
+  });
 }
 
 function mapOverrideStatusToSummaryStatus(overrideStatus) {
@@ -109,21 +130,6 @@ function getPunchMetadataFields(punch) {
 }
 
 function buildSummaryRowData(date, punch, regularization, leave) {
-  if (leave) {
-    const displayed = mergeDisplayedAttendanceFields(punch, regularization);
-    return {
-      status: AttendanceSummaryStatus.ON_LEAVE,
-      source: AttendanceSummarySource.LEAVE,
-      ...getPunchMetadataFields(punch),
-      punchInAt: displayed.punchInAt,
-      punchOutAt: displayed.punchOutAt,
-      workedMinutes:
-        regularization?.overrideWorkedMinutes ?? punch?.workedMinutes ?? null,
-      leaveRequestId: leave.id,
-      regularizationId: regularization?.id ?? null,
-    };
-  }
-
   if (regularization) {
     const displayed = mergeDisplayedAttendanceFields(punch, regularization);
     return {
@@ -133,8 +139,22 @@ function buildSummaryRowData(date, punch, regularization, leave) {
       punchInAt: displayed.punchInAt,
       punchOutAt: displayed.punchOutAt,
       workedMinutes: regularization.overrideWorkedMinutes ?? null,
-      leaveRequestId: null,
+      leaveRequestId: leave?.id ?? null,
       regularizationId: regularization.id,
+    };
+  }
+
+  if (leave) {
+    const displayed = mergeDisplayedAttendanceFields(punch, regularization);
+    return {
+      status: AttendanceSummaryStatus.ON_LEAVE,
+      source: AttendanceSummarySource.LEAVE,
+      ...getPunchMetadataFields(punch),
+      punchInAt: displayed.punchInAt,
+      punchOutAt: displayed.punchOutAt,
+      workedMinutes: punch?.workedMinutes ?? null,
+      leaveRequestId: leave.id,
+      regularizationId: null,
     };
   }
 
@@ -542,31 +562,14 @@ export async function upsertSummaryFromRegularization(
   regularization,
   db = getPrisma(),
 ) {
-  const [existing, punch] = await Promise.all([
-    db.attendanceSummary.findUnique({
-      where: summaryWhere(userId, date),
-    }),
+  const [punch, leave] = await Promise.all([
     db.attendancePunch.findUnique({
       where: summaryWhere(userId, date),
     }),
+    findApprovedLeaveForDate(db, userId, date),
   ]);
 
-  if (existing?.source === AttendanceSummarySource.LEAVE) {
-    const displayed = mergeDisplayedAttendanceFields(punch, regularization);
-    return db.attendanceSummary.update({
-      where: { id: existing.id },
-      data: {
-        ...getPunchMetadataFields(punch),
-        punchInAt: displayed.punchInAt,
-        punchOutAt: displayed.punchOutAt,
-        workedMinutes:
-          regularization.overrideWorkedMinutes ?? punch?.workedMinutes ?? null,
-        regularizationId: regularization.id,
-      },
-    });
-  }
-
-  const summaryData = buildSummaryRowData(date, punch, regularization, null);
+  const summaryData = buildSummaryRowData(date, punch, regularization, leave);
   if (!summaryData) {
     return null;
   }

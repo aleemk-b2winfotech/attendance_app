@@ -413,7 +413,7 @@ export async function listLeaveRequestsWeb(callerRoles, callerId, filters) {
 /**
  * Approves one pending leave request.
  * Self-approval is blocked; manager scope is enforced.
- * Keeps current behavior where approved leave takes precedence in attendance views.
+ * Attendance summaries preserve approved leave unless a regularization exists.
  */
 export async function approveLeaveRequest(
   callerRoles,
