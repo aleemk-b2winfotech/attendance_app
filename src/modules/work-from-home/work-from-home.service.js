@@ -7,7 +7,6 @@ import {
   intersectDateRanges,
   isWeeklyOff,
   toDateString,
-  appendNonAdminUserFilter,
 } from "../../common/index.js";
 import { getPrisma } from "../../config/database.js";
 import { LeaveStatus, Prisma } from "@prisma/client";
@@ -302,7 +301,6 @@ export async function listWorkFromHomeDays(callerRoles, callerId, filters) {
     isActive: true,
     ...buildManagerScopeWhere(callerRoles, callerId),
   };
-  appendNonAdminUserFilter(userWhere);
 
   if (filters.search) {
     userWhere.OR = [

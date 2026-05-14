@@ -130,6 +130,7 @@ export async function getWebAttendanceOverview(callerRoles, callerId, filters) {
     callerRoles,
     callerId,
     filters.search,
+    { excludeAdmins: true },
   );
 
   const [total, users] = await Promise.all([

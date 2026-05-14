@@ -21,11 +21,18 @@ export {
 /**
  * Builds Prisma where clause for attendance scope based on caller role.
  */
-export function buildAttendanceScopeWhere(callerRoles, callerId, search) {
+export function buildAttendanceScopeWhere(
+  callerRoles,
+  callerId,
+  search,
+  options = {},
+) {
   const where = {
     isActive: true,
   };
-  appendNonAdminUserFilter(where);
+  if (options.excludeAdmins) {
+    appendNonAdminUserFilter(where);
+  }
   if (isManagerScoped(callerRoles)) {
     where.managerUserId = callerId;
   }

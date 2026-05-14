@@ -132,7 +132,7 @@ export async function getUserById(callerRoles, callerId, userId) {
  * Guardrails:
  * - role arrays are converted to nullable privilege role
  * - callers cannot assign a role above their own
- * - managers can create only direct non-admin reports
+ * - managers can create only direct reports up to their own role
  * - email uniqueness enforced
  * - managerUserId (if given) must reference a manager
  */
@@ -151,7 +151,10 @@ export async function createUser(callerRoles, callerId, data) {
   });
   if (existing) throw new ConflictError("Email already registered");
 
-  await assertValidManager(data.managerUserId);
+  const managerUserId =
+    requestedRole === Role.ADMIN ? null : data.managerUserId || null;
+
+  await assertValidManager(managerUserId);
 
   const emailDomain = data.email.split("@")[1];
   if (emailDomain !== env().COMPANY_DOMAIN) {
@@ -163,7 +166,7 @@ export async function createUser(callerRoles, callerId, data) {
       fullName: data.fullName,
       email: data.email,
       role: requestedRole,
-      managerUserId: data.managerUserId || null,
+      managerUserId,
     },
     include: { manager: { select: { id: true, fullName: true } } },
   });
@@ -175,7 +178,7 @@ export async function createUser(callerRoles, callerId, data) {
  * Updates mutable user fields with role/scope restrictions.
  *
  * Manager limitations:
- * - can update only direct non-admin reports
+ * - can update only direct reports
  * - cannot reassign manager
  * - cannot assign admin
  */
@@ -197,8 +200,14 @@ export async function updateUser(callerRoles, callerId, userId, data) {
     assertRoleCanOnlyGrow(user.role, requestedRole);
   }
 
-  if (data.managerUserId) {
-    await assertValidManager(data.managerUserId);
+  const resultingRole = requestedRole === undefined ? user.role : requestedRole;
+  const managerUserId =
+    resultingRole === Role.ADMIN
+      ? null
+      : data.managerUserId;
+
+  if (managerUserId) {
+    await assertValidManager(managerUserId);
   }
 
   const updated = await prisma.user.update({
@@ -206,8 +215,8 @@ export async function updateUser(callerRoles, callerId, userId, data) {
     data: {
       ...(data.fullName !== undefined && { fullName: data.fullName }),
       ...(requestedRole !== undefined && { role: requestedRole }),
-      ...(data.managerUserId !== undefined && {
-        managerUserId: data.managerUserId,
+      ...((data.managerUserId !== undefined || resultingRole === Role.ADMIN) && {
+        managerUserId,
       }),
       ...(data.isActive !== undefined && { isActive: data.isActive }),
     },

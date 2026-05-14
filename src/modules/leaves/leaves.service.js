@@ -15,7 +15,6 @@ import {
   toDateString,
   buildManagerScopeUserWhere,
   assertDirectReportAccess,
-  appendNonAdminUserFilter,
   withEffectiveRoles,
 } from "../../common/index.js";
 import { paginate, paginationMeta } from "../../common/pagination.js";
@@ -371,7 +370,6 @@ export async function listLeaveRequestsWeb(callerRoles, callerId, filters) {
   const where = {};
   // Managers can act only on direct reports; admins get organization-wide view.
   Object.assign(where, buildManagerScopeUserWhere(callerRoles, callerId));
-  where.user = appendNonAdminUserFilter(where.user || {});
   if (filters.status) where.status = filters.status;
 
   if (filters.startDate || filters.endDate) {
