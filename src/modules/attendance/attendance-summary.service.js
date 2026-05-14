@@ -77,6 +77,8 @@ function mapOverrideStatusToSummaryStatus(overrideStatus) {
       return AttendanceSummaryStatus.HALF_DAY;
     case OverrideStatus.ABSENT:
       return AttendanceSummaryStatus.ABSENT;
+    case OverrideStatus.ON_LEAVE:
+      return AttendanceSummaryStatus.ON_LEAVE;
     default:
       return AttendanceSummaryStatus.PRESENT;
   }

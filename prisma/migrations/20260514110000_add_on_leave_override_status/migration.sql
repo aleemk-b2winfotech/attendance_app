@@ -1,0 +1,1 @@
+ALTER TYPE "OverrideStatus" ADD VALUE 'ON_LEAVE';

@@ -59,7 +59,7 @@ export async function upsertRegularization(
     );
   }
 
-  if ([OverrideStatus.ABSENT, OverrideStatus.WEEKLY_OFF, OverrideStatus.ON_LEAVE].includes(data.overrideStatus)) {
+  if ([OverrideStatus.ABSENT, OverrideStatus.ON_LEAVE].includes(data.overrideStatus)) {
     data.overridePunchInAt = null;
     data.overridePunchOutAt = null;
     overrideWorkedMinutes = null;
@@ -73,7 +73,7 @@ export async function upsertRegularization(
     }
 
     if (!data.overridePunchInAt && !data.overridePunchOutAt) {
-      throw new BadRequestError("Punch in and out times must be provided for non-absent status");
+      throw new BadRequestError("Punch in and out times must be provided for present or half-day status");
     }
 
     if (data.overridePunchInAt && new Date(data.overridePunchInAt).toDateString() !== new Date(date).toDateString()) {

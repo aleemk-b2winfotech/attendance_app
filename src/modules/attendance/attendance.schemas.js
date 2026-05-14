@@ -48,7 +48,7 @@ export const webAttendanceRecordsQuerySchema = z.object({
     message: 'endDate must be on or after startDate',
 });
 export const regularizationSchema = z.object({
-    overrideStatus: z.enum(['PRESENT', 'HALF_DAY', 'ABSENT']),
+    overrideStatus: z.enum(['PRESENT', 'HALF_DAY', 'ABSENT', 'ON_LEAVE']),
     overridePunchInAt: z.string().datetime().optional(),
     overridePunchOutAt: z.string().datetime().optional(),
     reason: z.string().min(1),
