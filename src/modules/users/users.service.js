@@ -10,6 +10,7 @@ import {
   isManagerScoped,
   roleFromEffectiveRolesOrRole,
   assertCanAssignRole,
+  roleRank,
   withEffectiveRoles,
   withEffectiveRolesMany,
 } from "../../common/index.js";
@@ -36,6 +37,12 @@ function getRequestedRole(data) {
 
 function assertRoleAssignable(callerRoles, targetRole) {
   assertCanAssignRole(callerRoles, targetRole);
+}
+
+function assertRoleCanOnlyGrow(currentRole, requestedRole) {
+  if (roleRank(requestedRole) < roleRank(currentRole)) {
+    throw new BadRequestError("Role can only be promoted, not downgraded");
+  }
 }
 
 async function assertValidManager(managerUserId) {
@@ -187,6 +194,7 @@ export async function updateUser(callerRoles, callerId, userId, data) {
   const requestedRole = getRequestedRole(data);
   if (requestedRole !== undefined) {
     assertRoleAssignable(callerRoles, requestedRole);
+    assertRoleCanOnlyGrow(user.role, requestedRole);
   }
 
   if (data.managerUserId) {
