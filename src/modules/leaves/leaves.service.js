@@ -291,42 +291,6 @@ export async function getMyLeaveRequests(userId, filters) {
   return { items, meta: paginationMeta(total, filters.page, filters.limit) };
 }
 /**
- * Returns leave request details.
- * If `userId` is provided, ownership is enforced (employee self endpoints).
- */
-export async function getLeaveRequestById(userId, leaveRequestId) {
-  const prisma = getPrisma();
-  const leave = await prisma.leaveRequest.findUnique({
-    where: { id: leaveRequestId },
-    include: {
-      user: { select: { id: true, fullName: true, email: true } },
-      actionBy: { select: { id: true, fullName: true } },
-    },
-  });
-  if (!leave) throw new NotFoundError("Leave request");
-  if (userId && leave.userId !== userId)
-    throw new ForbiddenError("Not your leave request");
-  return leave;
-}
-
-export async function getLeaveRequestByIdWeb(
-  callerRoles,
-  callerId,
-  leaveRequestId,
-) {
-  const prisma = getPrisma();
-  const leave = await prisma.leaveRequest.findUnique({
-    where: { id: leaveRequestId },
-    include: {
-      user: { select: { id: true, fullName: true, email: true, managerUserId: true, role: true } },
-      actionBy: { select: { id: true, fullName: true } },
-    },
-  });
-  if (!leave) throw new NotFoundError("Leave request");
-  assertDirectReportAccess(callerRoles, callerId, leave.user, "view");
-  return leave;
-}
-/**
  * Employee cancellation endpoint.
  * Only pending requests are cancellable.
  */

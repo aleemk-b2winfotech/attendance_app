@@ -93,10 +93,6 @@ router.post(
 // Leave requests
 router.get("/me/leave-requests", leavesController.getMyLeaveRequests);
 router.get(
-  "/me/leave-requests/:leaveRequestId",
-  leavesController.getMyLeaveRequest,
-);
-router.get(
   "/me/leave-requests/:leaveRequestId/thread",
   leavesController.getMyLeaveRequestThread,
 );

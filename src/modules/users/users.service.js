@@ -108,25 +108,6 @@ export async function listUsers(callerRoles, callerId, filters) {
 }
 
 /**
- * Fetches one user with manager/profile details.
- * Enforces same manager scope rule as list endpoint.
- */
-export async function getUserById(callerRoles, callerId, userId) {
-  const prisma = getPrisma();
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    include: {
-      manager: { select: { id: true, fullName: true, email: true } },
-      attendanceProfile: true,
-    },
-  });
-  if (!user) throw new NotFoundError("User");
-
-  assertDirectReportAccess(callerRoles, callerId, user, "view");
-  return withEffectiveRoles(user);
-}
-
-/**
  * Creates a user and its initial attendance profile.
  *
  * Guardrails:

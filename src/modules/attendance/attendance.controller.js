@@ -18,12 +18,6 @@ export async function myAttendanceOverview(req, res) {
     const result = await attendanceService.getUserAttendanceOverview(req.user.sub, startDate, endDate, includeHolidayHistory);
     sendSuccess(res, result);
 }
-export async function webUserAttendanceOverview(req, res) {
-    // Query is validated by middleware
-    const { startDate, endDate, includeHolidayHistory } = req.query;
-    const result = await attendanceService.getUserAttendanceOverview(req.params.userId, startDate, endDate, includeHolidayHistory);
-    sendSuccess(res, result);
-}
 export async function webAttendanceOverview(req, res) {
     // Query is validated by middleware (page/limit are already numbers)
     const result = await attendanceService.getWebAttendanceOverview(req.user.roles, req.user.sub, req.query);

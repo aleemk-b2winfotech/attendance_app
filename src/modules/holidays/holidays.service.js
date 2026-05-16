@@ -238,22 +238,6 @@ export async function listEmployeeHolidays(_employeeUserId, filters) {
     return holidays.map(employeeHolidayPayload);
 }
 /**
- * Returns one holiday with created/updated actor metadata.
- */
-export async function getHolidayById(holidayId) {
-    const prisma = getPrisma();
-    const holiday = await prisma.holiday.findUnique({
-        where: { id: holidayId },
-        include: {
-            createdBy: { select: { id: true, fullName: true } },
-            updatedBy: { select: { id: true, fullName: true } },
-        },
-    });
-    if (!holiday)
-        throw new NotFoundError('Holiday');
-    return holiday;
-}
-/**
  * Returns holiday change log timeline, newest first.
  */
 export async function getHolidayHistory(holidayId) {

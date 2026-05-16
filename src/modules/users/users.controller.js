@@ -5,10 +5,6 @@ export async function listUsers(req, res) {
     const result = await usersService.listUsers(req.user.roles, req.user.sub, req.query);
     sendSuccess(res, result.items, result.meta);
 }
-export async function getUser(req, res) {
-    const user = await usersService.getUserById(req.user.roles, req.user.sub, req.params.userId);
-    sendSuccess(res, user);
-}
 export async function createUser(req, res) {
     const user = await usersService.createUser(req.user.roles, req.user.sub, req.body);
     sendCreated(res, user, 'User created');

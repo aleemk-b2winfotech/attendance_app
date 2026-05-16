@@ -22,7 +22,6 @@ import {
   regularizationSchema,
   webAttendanceRecordsQuerySchema,
   webAttendanceOverviewQuerySchema,
-  attendanceOverviewQuerySchema,
 } from "../../modules/attendance/attendance.schemas.js";
 import * as leavesController from "../../modules/leaves/leaves.controller.js";
 import {
@@ -91,11 +90,6 @@ router.post(
   validate(createUserSchema),
   usersController.createUser,
 );
-router.get(
-  "/users/:userId",
-  requireRoles(Role.MANAGER, Role.ADMIN),
-  usersController.getUser,
-);
 router.patch(
   "/users/:userId",
   requireRoles(Role.MANAGER, Role.ADMIN),
@@ -133,12 +127,6 @@ router.get(
   validate(listWorkFromHomeQuerySchema, "query"),
   workFromHomeController.listWorkFromHomeDays,
 );
-router.get(
-  "/users/:userId/attendance/overview",
-  requireRoles(Role.MANAGER, Role.ADMIN),
-  validate(attendanceOverviewQuerySchema, "query"),
-  attendanceController.webUserAttendanceOverview,
-);
 // Regularizations
 router.put(
   "/users/:userId/attendance-regularizations/:date",
@@ -169,11 +157,6 @@ router.get(
   requireRoles(Role.MANAGER, Role.ADMIN),
   validate(listLeaveRequestsQuerySchema, "query"),
   leavesController.listLeaveRequestsWeb,
-);
-router.get(
-  "/leave-requests/:leaveRequestId",
-  requireRoles(Role.MANAGER, Role.ADMIN),
-  leavesController.getLeaveRequestWeb,
 );
 router.get(
   "/leave-requests/:leaveRequestId/thread",
@@ -228,11 +211,6 @@ router.get(
   requireRoles(Role.MANAGER, Role.ADMIN),
   validate(listHolidaysQuerySchema, "query"),
   holidaysController.listHolidays,
-);
-router.get(
-  "/holidays/:holidayId",
-  requireRoles(Role.MANAGER, Role.ADMIN),
-  holidaysController.getHoliday,
 );
 router.get(
   "/holidays/:holidayId/history",

@@ -21,10 +21,6 @@ export async function listEmployeeHolidays(req, res) {
     const result = await holidaysService.listEmployeeHolidays(req.user.sub, req.query);
     sendSuccess(res, result);
 }
-export async function getHoliday(req, res) {
-    const result = await holidaysService.getHolidayById(req.params.holidayId);
-    sendSuccess(res, result);
-}
 export async function getHolidayHistory(req, res) {
     const result = await holidaysService.getHolidayHistory(req.params.holidayId);
     sendSuccess(res, result);
