@@ -1,21 +1,33 @@
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env.js';
+import { getPrisma } from '../config/database.js';
 import { UnauthorizedError, ForbiddenError } from '../common/errors.js';
-export function authenticate(req, _res, next) {
+export async function authenticate(req, _res, next) {
     const header = req.headers.authorization;
     if (!header?.startsWith('Bearer ')) {
         throw new UnauthorizedError('Missing or invalid Authorization header');
     }
     const token = header.slice(7);
+    let payload;
     try {
         // Access token contains role + portal context used by downstream authorization guards.
-        const payload = jwt.verify(token, env().JWT_ACCESS_SECRET);
-        req.user = payload;
-        next();
+        payload = jwt.verify(token, env().JWT_ACCESS_SECRET);
     }
     catch {
         throw new UnauthorizedError('Invalid or expired access token');
     }
+    if (!payload || typeof payload !== 'object' || !payload.sub) {
+        throw new UnauthorizedError('Invalid or expired access token');
+    }
+    const user = await getPrisma().user.findUnique({
+        where: { id: payload.sub },
+        select: { isActive: true },
+    });
+    if (!user?.isActive) {
+        throw new UnauthorizedError('User not found or inactive');
+    }
+    req.user = payload;
+    next();
 }
 /** Ensure the token was issued for the given portal */
 export function requirePortal(portal) {

@@ -96,6 +96,11 @@ router.patch(
   validate(updateUserSchema),
   usersController.updateUser,
 );
+router.patch(
+  "/users/:userId/deactivate",
+  requireRoles(Role.MANAGER, Role.ADMIN),
+  usersController.deactivateUser,
+);
 // Attendance profiles
 router.get(
   "/users/:userId/attendance-profile",

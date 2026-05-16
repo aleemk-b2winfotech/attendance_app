@@ -10,6 +10,7 @@ import {
   isManagerScoped,
   roleFromEffectiveRolesOrRole,
   assertCanAssignRole,
+  highestRoleFromRoles,
   roleRank,
   withEffectiveRoles,
   withEffectiveRolesMany,
@@ -37,6 +38,20 @@ function getRequestedRole(data) {
 
 function assertRoleAssignable(callerRoles, targetRole) {
   assertCanAssignRole(callerRoles, targetRole);
+}
+
+function assertCanDeactivateUser(callerRoles, callerId, targetUser) {
+  if (callerId === targetUser.id) {
+    throw new BadRequestError("You cannot deactivate your own user");
+  }
+
+  if (isManagerScoped(callerRoles)) {
+    assertDirectReportAccess(callerRoles, callerId, targetUser, "deactivate");
+  }
+
+  if (roleRank(targetUser.role) > roleRank(highestRoleFromRoles(callerRoles))) {
+    throw new ForbiddenError("Cannot deactivate a user higher than your own role");
+  }
 }
 
 function assertRoleCanOnlyGrow(currentRole, requestedRole) {
@@ -167,6 +182,9 @@ export async function updateUser(callerRoles, callerId, userId, data) {
   const prisma = getPrisma();
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) throw new NotFoundError("User");
+  if (data.isActive !== undefined) {
+    throw new BadRequestError("Use the deactivate endpoint to change user active status");
+  }
 
   if (isManagerScoped(callerRoles)) {
     assertDirectReportAccess(callerRoles, callerId, user, "update");
@@ -199,10 +217,44 @@ export async function updateUser(callerRoles, callerId, userId, data) {
       ...((data.managerUserId !== undefined || resultingRole === Role.ADMIN) && {
         managerUserId,
       }),
-      ...(data.isActive !== undefined && { isActive: data.isActive }),
     },
     include: { manager: { select: { id: true, fullName: true } } },
   });
+  return withEffectiveRoles(updated);
+}
+
+/**
+ * One-way user soft delete.
+ *
+ * Deactivation blocks future login/refresh and revokes all active sessions.
+ */
+export async function deactivateUser(callerRoles, callerId, userId) {
+  const prisma = getPrisma();
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) throw new NotFoundError("User");
+
+  assertCanDeactivateUser(callerRoles, callerId, user);
+
+  if (!user.isActive) {
+    throw new ConflictError("User is already inactive");
+  }
+
+  const revokedAt = new Date();
+  const updated = await prisma.$transaction(async (tx) => {
+    const deactivatedUser = await tx.user.update({
+      where: { id: userId },
+      data: { isActive: false },
+      include: { manager: { select: { id: true, fullName: true } } },
+    });
+
+    await tx.refreshToken.updateMany({
+      where: { userId, revokedAt: null },
+      data: { revokedAt },
+    });
+
+    return deactivatedUser;
+  });
+
   return withEffectiveRoles(updated);
 }
 

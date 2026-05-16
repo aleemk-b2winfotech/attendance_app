@@ -13,6 +13,10 @@ export async function updateUser(req, res) {
     const user = await usersService.updateUser(req.user.roles, req.user.sub, req.params.userId, req.body);
     sendSuccess(res, user, undefined, 'User updated');
 }
+export async function deactivateUser(req, res) {
+    const user = await usersService.deactivateUser(req.user.roles, req.user.sub, req.params.userId);
+    sendSuccess(res, user, undefined, 'User deactivated');
+}
 export async function getAttendanceProfile(req, res) {
     const profile = await usersService.getAttendanceProfile(req.user.roles, req.user.sub, req.params.userId);
     sendSuccess(res, profile);
