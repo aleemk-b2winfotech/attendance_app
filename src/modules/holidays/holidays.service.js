@@ -1,7 +1,7 @@
 import { HolidayChangeType } from '@prisma/client';
 import { getPrisma } from '../../config/database.js';
 import { BadRequestError, ConflictError, NotFoundError, } from '../../common/errors.js';
-import { businessToday, toDateString } from '../../common/index.js';
+import { businessNow, businessToday, toDateString } from '../../common/index.js';
 import { rebuildSummariesForDateRange } from '../attendance/attendance-summary.service.js';
 // Normalized snapshot stored in change logs for audit/history visibility.
 function holidaySnapshot(h) {
@@ -33,6 +33,22 @@ function mergeDateRangeBounds(startA, endA, startB, endB) {
     return {
         startDate: dates.reduce((min, value) => value < min ? value : min),
         endDate: dates.reduce((max, value) => value > max ? value : max),
+    };
+}
+function currentBusinessYearBounds() {
+    const now = businessNow();
+    return {
+        startDate: now.startOf('year').toISODate(),
+        endDate: now.endOf('year').toISODate(),
+    };
+}
+function employeeHolidayPayload(holiday) {
+    return {
+        id: holiday.id,
+        title: holiday.title,
+        description: holiday.description,
+        startDate: toDateString(holiday.startDate),
+        endDate: toDateString(holiday.endDate),
     };
 }
 /**
@@ -184,6 +200,42 @@ export async function listHolidays(filters) {
             updatedBy: { select: { id: true, fullName: true } },
         },
     });
+}
+/**
+ * Lists active holidays for the authenticated mobile employee.
+ *
+ * Holidays are currently company-wide, so the employee id scopes access through
+ * mobile authentication rather than through a holiday assignment table.
+ */
+export async function listEmployeeHolidays(_employeeUserId, filters) {
+    const prisma = getPrisma();
+    const defaults = currentBusinessYearBounds();
+    const startDate = filters.startDate || defaults.startDate;
+    const endDate = filters.endDate || defaults.endDate;
+    const today = businessToday();
+    const where = {
+        isDeleted: false,
+        endDate: { gte: new Date(startDate) },
+        startDate: { lte: new Date(endDate) },
+    };
+    if (filters.filter === 'future') {
+        where.endDate = { ...where.endDate, gte: new Date(today) };
+    }
+    if (filters.filter === 'past') {
+        where.endDate = { ...where.endDate, lt: new Date(today) };
+    }
+    const holidays = await prisma.holiday.findMany({
+        where,
+        orderBy: { startDate: filters.filter === 'past' ? 'desc' : 'asc' },
+        select: {
+            id: true,
+            title: true,
+            description: true,
+            startDate: true,
+            endDate: true,
+        },
+    });
+    return holidays.map(employeeHolidayPayload);
 }
 /**
  * Returns one holiday with created/updated actor metadata.

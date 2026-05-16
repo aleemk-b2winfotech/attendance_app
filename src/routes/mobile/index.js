@@ -29,6 +29,10 @@ import {
   createDeviceChangeSchema,
 } from "../../modules/device-changes/device-changes.schemas.js";
 import * as dashboardController from "../../modules/dashboard/dashboard.controller.js";
+import * as holidaysController from "../../modules/holidays/holidays.controller.js";
+import {
+  listEmployeeHolidaysQuerySchema,
+} from "../../modules/holidays/holidays.schemas.js";
 import { Portal, Role } from "@prisma/client";
 const router = Router();
 // Public auth endpoints (no bearer token required).
@@ -62,6 +66,12 @@ router.use(
 router.get("/me/profile", usersController.getMyProfile);
 // Dashboard
 router.get("/me/dashboard", dashboardController.mobileDashboard);
+// Holidays
+router.get(
+  "/me/holidays",
+  validate(listEmployeeHolidaysQuerySchema, "query"),
+  holidaysController.listEmployeeHolidays,
+);
 // Attendance
 router.get(
   "/me/attendance/overview",
