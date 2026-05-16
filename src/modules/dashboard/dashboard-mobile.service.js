@@ -2,11 +2,11 @@ import { LeaveStatus, AttendanceSummaryStatus, WorkMode } from "@prisma/client";
 import { getPrisma } from "../../config/database.js";
 import {
   businessToday,
+  businessYesterday,
   businessMonthStart,
   businessMonthEnd,
   dateRange,
   isWeeklyOff,
-  clampEndDate,
   toDateString,
   withEffectiveRoles,
 } from "../../common/index.js";
@@ -167,8 +167,10 @@ export async function getMobileDashboard(userId) {
     };
   }
 
-  // Month summary through yesterday
-  const appliedEndDate  = monthEnd;
+  // Month summary spans the full month, but missing rows are only absences
+  // after the attendance day has closed.
+  const appliedEndDate = monthEnd;
+  const countMissingAsAbsentThroughDate = businessYesterday();
   const summaryStartDate =
     userCreatedDate && userCreatedDate > monthStart
       ? userCreatedDate
@@ -196,6 +198,7 @@ export async function getMobileDashboard(userId) {
     summaryDates,
     summaryMap,
     holidayDateSet,
+    { countMissingAsAbsentThroughDate },
   );
 
   // Pending leaves

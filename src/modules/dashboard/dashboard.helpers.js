@@ -33,6 +33,7 @@ export function computeUserMonthSummary(
   summaryDates,
   summaryMap,
   holidayDateSet,
+  options = {},
 ) {
   const { FULL_DAY_MINUTES } = env();
   const stats = computeUserAttendanceStats(
@@ -42,6 +43,7 @@ export function computeUserMonthSummary(
     FULL_DAY_MINUTES,
     null,
     true,
+    options,
   );
 
   // Transform to match expected format (combine presentDays and halfDays)

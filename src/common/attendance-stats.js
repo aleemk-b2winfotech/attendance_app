@@ -105,6 +105,8 @@ export function aggregateAttendanceStats(
  * @param {number} fullDayMinutes - Expected minutes for a full working day
  * @param {string} userCreatedDate - Optional user creation date (YYYY-MM-DD)
  * @param {boolean} includeWorkedMinutes - Whether to calculate totalWorkedMinutes
+ * @param {object} options - Optional behavior flags
+ * @param {string|null} options.countMissingAsAbsentThroughDate - Latest date where missing rows count as absent
  * @returns {object} User stats with day counts and attendance percentage
  */
 export function computeUserAttendanceStats(
@@ -114,7 +116,9 @@ export function computeUserAttendanceStats(
   fullDayMinutes,
   userCreatedDate = null,
   includeWorkedMinutes = true,
+  options = {},
 ) {
+  const { countMissingAsAbsentThroughDate = null } = options;
   let presentDays = 0;
   let halfDays = 0;
   let absentDays = 0;
@@ -159,7 +163,10 @@ export function computeUserAttendanceStats(
           leaveDays++;
           break;
       }
-    } else {
+    } else if (
+      !countMissingAsAbsentThroughDate ||
+      date <= countMissingAsAbsentThroughDate
+    ) {
       absentDays++;
     }
   }
