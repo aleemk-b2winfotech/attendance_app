@@ -3,6 +3,7 @@ import { getPrisma } from "../../config/database.js";
 import {
   businessToday,
   businessMonthStart,
+  businessMonthEnd,
   dateRange,
   isWeeklyOff,
   clampEndDate,
@@ -31,6 +32,7 @@ export async function getMobileDashboard(userId) {
   const prisma = getPrisma();
   const today = businessToday();
   const monthStart = businessMonthStart();
+  const monthEnd = businessMonthEnd();
 
   // Basic profile card
   const user = await prisma.user.findUnique({
@@ -166,7 +168,7 @@ export async function getMobileDashboard(userId) {
   }
 
   // Month summary through yesterday
-  const { appliedEndDate } = clampEndDate(today);
+  const appliedEndDate  = monthEnd;
   const summaryStartDate =
     userCreatedDate && userCreatedDate > monthStart
       ? userCreatedDate
