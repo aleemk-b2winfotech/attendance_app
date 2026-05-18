@@ -45,9 +45,12 @@ async function createRefreshToken(userId, portal) {
     const hashed = hashToken(raw);
     const ttlSeconds = parseDuration(env().JWT_REFRESH_TTL);
     const expiresAt = new Date(Date.now() + ttlSeconds * 1000);
-    await prisma.refreshToken.create({
-        data: { userId, portal, tokenHash: hashed, expiresAt },
-    });
+    await prisma.$transaction([
+        prisma.refreshToken.deleteMany({ where: { userId, portal } }),
+        prisma.refreshToken.create({
+            data: { userId, portal, tokenHash: hashed, expiresAt },
+        }),
+    ]);
     /**
      * Token format is base64url(JSON) containing userId/portal/rawToken.
      * This is opaque to clients but lets us validate DB ownership and portal match.
