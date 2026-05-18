@@ -39,7 +39,8 @@ export async function getWebDashboard(
 
   // Keep all dashboard counters aligned to the same visible user scope.
   const userWhere = {
-    isActive: true,
+    // We include inactive users in headcount for consistency with user list
+    // but we can filter by isActive if needed in the future.
   };
   appendNonAdminUserFilter(userWhere);
   if (isManagerScoped(callerRoles)) {
