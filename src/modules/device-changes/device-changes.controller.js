@@ -20,6 +20,10 @@ export async function listDeviceChangeRequestsWeb(req, res) {
     const result = await dcService.listDeviceChangeRequestsWeb(req.user.roles, req.user.sub, req.query);
     sendSuccess(res, result.items, result.meta);
 }
+export async function listDeviceChangeLogsForUser(req, res) {
+    const result = await dcService.listDeviceChangeLogsForUser(req.user.roles, req.user.sub, req.params.userId, req.query);
+    sendSuccess(res, result.items, result.meta);
+}
 export async function approveDeviceChange(req, res) {
     const result = await dcService.approveDeviceChange(req.user.roles, req.user.sub, req.params.requestId, req.body?.actionNote);
     sendSuccess(res, result, undefined, 'Device change approved');

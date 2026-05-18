@@ -1253,6 +1253,27 @@ QA checks:
 - Manager sees direct-report requests only.
 - Search and status filters work together.
 
+#### GET `/api/v1/web/users/:userId/device-change-logs`
+
+Roles: `MANAGER`, `ADMIN`
+
+Query parameters:
+
+| Name | Required | Values |
+|---|---:|---|
+| `status` | no | `PENDING`, `APPROVED`, `REJECTED` |
+| `page` | no | integer `>=1`, default `1` |
+| `limit` | no | integer `1..100`, default `20` |
+
+Expected `200`, list plus pagination.
+
+QA checks:
+
+- Admin can view logs for any user.
+- Manager can view logs only for direct reports.
+- Unknown `userId` returns `404`.
+- Status filter works.
+
 #### PATCH `/api/v1/web/device-change-requests/:requestId/approve`
 
 Roles: `MANAGER`, `ADMIN`

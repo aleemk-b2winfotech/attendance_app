@@ -16,4 +16,9 @@ export const listDeviceChangeQuerySchema = z.object({
     page: z.coerce.number().int().min(1).default(1),
     limit: z.coerce.number().int().min(1).max(100).default(20),
 });
+export const userDeviceChangeLogsQuerySchema = z.object({
+    status: z.enum(['PENDING', 'APPROVED', 'REJECTED']).optional(),
+    page: z.coerce.number().int().min(1).default(1),
+    limit: z.coerce.number().int().min(1).max(100).default(20),
+});
 //# sourceMappingURL=device-changes.schemas.js.map

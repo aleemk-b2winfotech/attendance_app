@@ -35,6 +35,7 @@ import {
   deviceChangeActionSchema,
   deviceChangeRejectSchema,
   listDeviceChangeQuerySchema,
+  userDeviceChangeLogsQuerySchema,
 } from "../../modules/device-changes/device-changes.schemas.js";
 import * as holidaysController from "../../modules/holidays/holidays.controller.js";
 import {
@@ -197,6 +198,12 @@ router.get(
   requireRoles(Role.MANAGER, Role.ADMIN),
   validate(listDeviceChangeQuerySchema, "query"),
   deviceChangesController.listDeviceChangeRequestsWeb,
+);
+router.get(
+  "/users/:userId/device-change-logs",
+  requireRoles(Role.MANAGER, Role.ADMIN),
+  validate(userDeviceChangeLogsQuerySchema, "query"),
+  deviceChangesController.listDeviceChangeLogsForUser,
 );
 router.patch(
   "/device-change-requests/:requestId/approve",

@@ -84,6 +84,36 @@ export async function listDeviceChangeRequestsWeb(callerRoles, callerId, filters
     return { items, meta: paginationMeta(total, filters.page, filters.limit) };
 }
 /**
+ * Manager/admin user-specific audit log endpoint.
+ * Managers can view only direct-report device change logs; admins can view all.
+ */
+export async function listDeviceChangeLogsForUser(callerRoles, callerId, userId, filters) {
+    const prisma = getPrisma();
+    const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true, fullName: true, email: true, managerUserId: true },
+    });
+    if (!user)
+        throw new NotFoundError('User');
+    assertDirectReportAccess(callerRoles, callerId, user, 'view device change logs for');
+    const where = { userId };
+    if (filters.status)
+        where.status = filters.status;
+    const [total, items] = await Promise.all([
+        prisma.deviceChangeRequest.count({ where }),
+        prisma.deviceChangeRequest.findMany({
+            where,
+            orderBy: { createdAt: 'desc' },
+            include: {
+                user: { select: { id: true, fullName: true, email: true } },
+                actionBy: { select: { id: true, fullName: true } },
+            },
+            ...paginate(filters.page, filters.limit),
+        }),
+    ]);
+    return { items, meta: paginationMeta(total, filters.page, filters.limit) };
+}
+/**
  * Approves a pending device change request.
  *
  * Side effects in same transaction:
