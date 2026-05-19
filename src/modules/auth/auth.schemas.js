@@ -4,9 +4,6 @@ export const googleLoginMobileSchema = z.object({
     googleToken: z.string().min(1),
     deviceId: z.string().min(1),
 });
-export const googleLoginWebSchema = z.object({
-    googleToken: z.string().min(1),
-});
 export const refreshTokenSchema = z.object({
     refreshToken: z.string().min(1),
 });

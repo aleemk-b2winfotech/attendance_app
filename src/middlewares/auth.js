@@ -2,12 +2,16 @@ import jwt from 'jsonwebtoken';
 import { env } from '../config/env.js';
 import { getPrisma } from '../config/database.js';
 import { UnauthorizedError, ForbiddenError } from '../common/errors.js';
+import { parseCookies } from '../common/cookies.js';
+const WEB_ACCESS_COOKIE = 'attendance_web_access';
 export async function authenticate(req, _res, next) {
     const header = req.headers.authorization;
-    if (!header?.startsWith('Bearer ')) {
-        throw new UnauthorizedError('Missing or invalid Authorization header');
+    const bearerToken = header?.startsWith('Bearer ') ? header.slice(7) : null;
+    const cookieToken = parseCookies(req.headers.cookie)[WEB_ACCESS_COOKIE];
+    const token = bearerToken || cookieToken;
+    if (!token) {
+        throw new UnauthorizedError('Missing or invalid session');
     }
-    const token = header.slice(7);
     let payload;
     try {
         // Access token contains role + portal context used by downstream authorization guards.

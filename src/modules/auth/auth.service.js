@@ -4,7 +4,7 @@ import { OAuth2Client } from 'google-auth-library';
 import { Portal, Role } from '@prisma/client';
 import { env } from '../../config/env.js';
 import { getPrisma } from '../../config/database.js';
-import { UnauthorizedError, ForbiddenError } from '../../common/errors.js';
+import { UnauthorizedError, ForbiddenError, BadRequestError } from '../../common/errors.js';
 import { getEffectiveRoles } from '../../common/role-helpers.js';
 // We never store raw refresh tokens; only deterministic SHA-256 hashes.
 function hashToken(token) {
@@ -26,6 +26,19 @@ function parseDuration(dur) {
         case 'd': return val * 86400;
         default: return 900;
     }
+}
+export function getAuthConfig() {
+    const e = env();
+    return {
+        accessTtl: e.JWT_ACCESS_TTL,
+        refreshTtl: e.JWT_REFRESH_TTL,
+        companyDomain: e.COMPANY_DOMAIN,
+        googleWebClientId: e.GOOGLE_WEB_CLIENT_ID,
+        webOrigin: e.CORS_WEB_ORIGIN,
+        webCallbackUrl: e.WEB_AUTH_CALLBACK_URL,
+        webSuccessUrl: e.WEB_AUTH_SUCCESS_URL,
+        webFailureUrl: e.WEB_AUTH_FAILURE_URL,
+    };
 }
 function signAccessToken(userId, email, role, portal) {
     const roles = getEffectiveRoles(role);
@@ -58,6 +71,17 @@ async function createRefreshToken(userId, portal) {
     const tokenPayload = Buffer.from(JSON.stringify({ userId, portal, token: raw })).toString('base64url');
     return tokenPayload;
 }
+function base64Url(buffer) {
+    return buffer.toString('base64url');
+}
+export function createPkcePair() {
+    const verifier = base64Url(randomBytes(64));
+    const challenge = base64Url(createHash('sha256').update(verifier).digest());
+    return { verifier, challenge };
+}
+export function createOAuthState() {
+    return base64Url(randomBytes(32));
+}
 /**
  * Verifies a Google ID token against the expected OAuth client ID.
  * This enforces portal-specific client audiences and prevents token reuse from
@@ -74,13 +98,53 @@ async function verifyGoogleToken(idToken, clientId) {
         if (!payload?.email)
             throw new UnauthorizedError('Invalid Google token');
         // Normalize email casing once so DB lookups are stable.
-        return { email: payload.email.toLowerCase(), name: payload.name || '' };
+        return {
+            sub: payload.sub,
+            email: payload.email.toLowerCase(),
+            name: payload.name || '',
+            hd: payload.hd || '',
+            emailVerified: payload.email_verified === true,
+        };
     }
     catch (err) {
         if (err instanceof UnauthorizedError)
             throw err;
         throw new UnauthorizedError('Google token verification failed');
     }
+}
+function assertCompanyGoogleIdentity(google, e) {
+    if (!google.emailVerified) {
+        throw new ForbiddenError('Google email is not verified');
+    }
+    if (google.hd !== e.COMPANY_DOMAIN) {
+        throw new ForbiddenError('Email domain not allowed');
+    }
+}
+async function exchangeGoogleCodeForIdToken(code, codeVerifier, redirectUri) {
+    const e = env();
+    if (!e.GOOGLE_WEB_CLIENT_SECRET) {
+        throw new BadRequestError('Google web client secret is not configured');
+    }
+    const response = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+            code,
+            code_verifier: codeVerifier,
+            redirect_uri: redirectUri,
+            client_id: e.GOOGLE_WEB_CLIENT_ID,
+            client_secret: e.GOOGLE_WEB_CLIENT_SECRET,
+            grant_type: 'authorization_code',
+        }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || payload.error) {
+        throw new UnauthorizedError(payload.error_description || 'Google authorization failed');
+    }
+    if (!payload.id_token) {
+        throw new UnauthorizedError('Google did not return an ID token');
+    }
+    return payload.id_token;
 }
 function portalAllowedForRoles(portal, roles) {
     if (portal === Portal.MOBILE) {
@@ -104,10 +168,7 @@ export async function loginMobile(googleToken, deviceId) {
     const e = env();
     const google = await verifyGoogleToken(googleToken, e.GOOGLE_WEB_CLIENT_ID);
     // Strict domain allow-list to keep authentication enterprise-scoped.
-    const domain = google.email.split('@')[1];
-    if (domain !== e.COMPANY_DOMAIN) {
-        throw new ForbiddenError('Email domain not allowed');
-    }
+    assertCompanyGoogleIdentity(google, e);
     const prisma = getPrisma();
     const user = await prisma.user.findUnique({
         where: { email: google.email },
@@ -167,10 +228,7 @@ export async function loginMobile(googleToken, deviceId) {
 export async function loginWeb(googleToken) {
     const e = env();
     const google = await verifyGoogleToken(googleToken, e.GOOGLE_WEB_CLIENT_ID);
-    const domain = google.email.split('@')[1];
-    if (domain !== e.COMPANY_DOMAIN) {
-        throw new ForbiddenError('Email domain not allowed');
-    }
+    assertCompanyGoogleIdentity(google, e);
     const prisma = getPrisma();
     const user = await prisma.user.findUnique({ where: { email: google.email } });
     if (!user || !user.isActive) {
@@ -192,6 +250,10 @@ export async function loginWeb(googleToken) {
             roles,
         },
     };
+}
+export async function loginWebWithAuthorizationCode(code, codeVerifier, redirectUri) {
+    const idToken = await exchangeGoogleCodeForIdToken(code, codeVerifier, redirectUri);
+    return loginWeb(idToken);
 }
 /**
  * Refresh token rotation endpoint.
@@ -265,10 +327,7 @@ export async function logout(encodedRefreshToken) {
 export async function requestDeviceChangeViaGoogle(googleToken, deviceId, reason) {
     const e = env();
     const google = await verifyGoogleToken(googleToken, e.GOOGLE_WEB_CLIENT_ID);
-    const domain = google.email.split('@')[1];
-    if (domain !== e.COMPANY_DOMAIN) {
-        throw new ForbiddenError('Email domain not allowed');
-    }
+    assertCompanyGoogleIdentity(google, e);
     const prisma = getPrisma();
     const user = await prisma.user.findUnique({
         where: { email: google.email },

@@ -17,9 +17,13 @@ const envSchema = z.object({
   GOOGLE_WEB_CLIENT_ID: z
     .string()
     .min(1),
+  GOOGLE_WEB_CLIENT_SECRET: z.string().min(1).optional(),
   GOOGLE_ANDROID_CLIENT_ID: z
     .string()
     .min(1),
+  WEB_AUTH_CALLBACK_URL: z.string().url().optional(),
+  WEB_AUTH_SUCCESS_URL: z.string().url().optional(),
+  WEB_AUTH_FAILURE_URL: z.string().url().optional(),
   FULL_DAY_MINUTES: z.coerce.number().default(540),
   HALF_DAY_MINUTES: z.coerce.number().default(270),
   CORS_WEB_ORIGIN: z.string().default("https://w2b.vercel.app"),

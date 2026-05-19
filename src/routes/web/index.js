@@ -6,10 +6,6 @@ import {
 } from "../../middlewares/index.js";
 import { validate } from "../../middlewares/validate.js";
 import * as authController from "../../modules/auth/auth.controller.js";
-import {
-  googleLoginWebSchema,
-  refreshTokenSchema,
-} from "../../modules/auth/auth.schemas.js";
 import * as usersController from "../../modules/users/users.controller.js";
 import {
   createUserSchema,
@@ -53,20 +49,15 @@ import * as dashboardController from "../../modules/dashboard/dashboard.controll
 import { Portal, Role } from "@prisma/client";
 const router = Router();
 // Public auth endpoints (login / refresh / logout).
-router.post(
-  "/auth/google/login",
-  validate(googleLoginWebSchema),
-  authController.webGoogleLogin,
-);
-router.post(
-  "/auth/refresh",
-  validate(refreshTokenSchema),
-  authController.refreshToken,
-);
-router.post(
-  "/auth/logout",
-  validate(refreshTokenSchema),
-  authController.logoutHandler,
+router.get("/auth/google/start", authController.webGoogleStart);
+router.get("/auth/google/callback", authController.webGoogleCallback);
+router.post("/auth/refresh", authController.refreshToken);
+router.post("/auth/logout", authController.logoutHandler);
+router.get(
+  "/auth/session",
+  authenticate,
+  requirePortal(Portal.WEB),
+  authController.webSession,
 );
 // Protected zone: token must be WEB portal. Fine-grained roles applied per route.
 router.use(authenticate, requirePortal(Portal.WEB));

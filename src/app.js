@@ -20,6 +20,7 @@ import { sendError, sendSuccess } from './common/response.js';
 export function createApp() {
     const app = express();
     const e = env();
+    app.set('trust proxy', 1);
     // Security headers and payload compression are safe defaults for all routes.
     app.use(helmet());
     app.use(compression());
