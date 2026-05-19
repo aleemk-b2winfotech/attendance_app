@@ -1,6 +1,6 @@
 # AttendanceAppServer API Testing Guide
 
-Verified against `AttendanceAppServer` source on 2026-05-16.
+Verified against `AttendanceAppServer` source on 2026-05-19.
 
 This guide is intended for QA execution in Postman, Insomnia, curl, or an automated API suite. It covers environment setup, authentication, roles, route coverage, payload validation, expected envelopes, negative cases, and end-to-end workflow checks.
 
@@ -25,7 +25,7 @@ Out of scope for this document:
 
 - Web UI visual testing
 - Flutter UI testing
-- Google OAuth UI flows, except obtaining valid Google ID tokens for API login
+- Google provider UI behavior, except completing the web OAuth redirect flow and obtaining valid mobile Google ID tokens
 - Load/performance testing beyond simple smoke concurrency checks
 
 ## 2. Environment Setup
@@ -63,9 +63,13 @@ Minimum variables QA must confirm before testing:
 | `BUSINESS_TIMEZONE` | Default is `Asia/Kolkata`. All date-only business logic uses this timezone. |
 | `COMPANY_DOMAIN` | Login and user creation require this email domain. |
 | `GOOGLE_WEB_CLIENT_ID` | Google ID token audience currently used by both web and mobile login verification. |
+| `GOOGLE_WEB_CLIENT_SECRET` | Required for the web authorization-code callback to exchange Google `code` for an ID token. |
 | `GOOGLE_ANDROID_CLIENT_ID` | Present in config, but current mobile login service verifies with `GOOGLE_WEB_CLIENT_ID`. |
+| `WEB_AUTH_CALLBACK_URL` | Optional explicit web OAuth callback URL. Must exactly match the Google Cloud redirect URI. |
+| `WEB_AUTH_SUCCESS_URL` | Optional frontend URL for successful web login redirects, for example `/dashboard`. |
+| `WEB_AUTH_FAILURE_URL` | Optional frontend URL for failed web login redirects, for example `/login?error=google_auth_failed`. |
 | `FULL_DAY_MINUTES` / `HALF_DAY_MINUTES` | Used for attendance summary calculations. |
-| `CORS_WEB_ORIGIN` | Web client origin allowed by CORS. |
+| `CORS_WEB_ORIGIN` | Web client origin allowed by CORS. Must match the frontend origin when testing credentialed cookie requests. |
 
 ### 2.3 Test data roles
 
@@ -103,8 +107,9 @@ Recommended collection variables:
 | `webBase` | `{{apiRoot}}/web` |
 | `mobileAccessToken` | Set from mobile login response. |
 | `mobileRefreshToken` | Set from mobile login response. |
-| `webAccessToken` | Set from web login response. |
-| `webRefreshToken` | Set from web login response. |
+| `webCookieJar` | Use the client cookie jar after web OAuth callback. Web auth is cookie-based. |
+| `webAccessToken` | Optional: extract from `attendance_web_access` only for direct Bearer-token route tests. |
+| `webRefreshToken` | Optional: extract from `attendance_web_refresh` only for direct refresh-token body tests. |
 | `deviceId` | Stable test device id, for example `qa-device-001`. |
 | `newDeviceId` | Device id used for change-request tests. |
 | `adminUserId` | Seeded admin id. |
@@ -130,6 +135,14 @@ Protected routes:
 ```http
 Authorization: Bearer <accessToken>
 ```
+
+Web protected routes also accept the HttpOnly session cookie set by the web OAuth callback:
+
+```http
+Cookie: attendance_web_access=<jwt>
+```
+
+Browser and Postman cookie-jar testing should prefer cookies for `/api/v1/web/*`. Mobile API testing should continue to use `Authorization: Bearer <mobileAccessToken>`.
 
 Mobile punch-in and punch-out additionally require:
 
@@ -188,7 +201,7 @@ Access tokens include `portal` and `roles`.
 | Portal | Token source | Allowed route group |
 |---|---|---|
 | `MOBILE` | `POST /mobile/auth/google/login` | `/api/v1/mobile/*` protected routes |
-| `WEB` | `POST /web/auth/google/login` | `/api/v1/web/*` protected routes |
+| `WEB` | Backend web OAuth callback cookies, or direct Bearer token for low-level API tests | `/api/v1/web/*` protected routes |
 
 Portal mismatch should return `403`.
 
@@ -360,37 +373,138 @@ QA checks:
 
 ### 5.2 Web auth
 
-#### POST `/api/v1/web/auth/google/login`
+Web auth is a browser-style Google authorization-code flow. The frontend should start at `/auth/google/start`; the backend owns the Google callback, validates `state` and PKCE, creates app tokens, stores them in HttpOnly cookies, and redirects back to the frontend.
 
-Body:
+#### GET `/api/v1/web/auth/google/start`
+
+Expected behavior:
+
+- Returns a `302` redirect to `https://accounts.google.com/o/oauth2/v2/auth`.
+- Sets short-lived temporary OAuth cookies:
+  - `attendance_web_oauth_state`
+  - `attendance_web_oauth_verifier`
+- Google redirect URL includes `client_id`, `redirect_uri`, `response_type=code`, `scope=openid email`, `state`, `code_challenge`, `code_challenge_method=S256`, `hd`, and `prompt=select_account`.
+
+QA checks:
+
+- `attendance_web_oauth_state` and `attendance_web_oauth_verifier` are `HttpOnly`.
+- Temporary cookies have path `/api/v1/web`.
+- Temporary cookies expire quickly, currently `10` minutes.
+- `redirect_uri` matches `WEB_AUTH_CALLBACK_URL` when configured.
+- If `WEB_AUTH_CALLBACK_URL` is not configured, fallback callback uses the public request protocol/host. In proxied environments, verify HTTPS is preserved.
+
+#### GET `/api/v1/web/auth/google/callback`
+
+Google redirects back to this endpoint with query params:
+
+```http
+GET /api/v1/web/auth/google/callback?code=<google-code>&state=<oauth-state>
+```
+
+Expected successful behavior:
+
+- Reads `code` and `state` from query params.
+- Reads `attendance_web_oauth_state` and `attendance_web_oauth_verifier` from cookies.
+- Clears the temporary OAuth cookies.
+- Rejects the callback if returned `state` does not match the state cookie.
+- Exchanges the Google authorization code using the PKCE verifier.
+- Verifies the resulting Google ID token.
+- Requires verified Google email and hosted domain matching `COMPANY_DOMAIN`.
+- Requires a provisioned, active web user with `MANAGER` or `ADMIN` effective access.
+- Sets web session cookies:
+  - `attendance_web_access`
+  - `attendance_web_refresh`
+- Redirects to `WEB_AUTH_SUCCESS_URL` when configured, otherwise `${CORS_WEB_ORIGIN}/dashboard`.
+
+Expected failure behavior:
+
+- If Google returns `error`, backend clears temporary OAuth cookies and redirects to `WEB_AUTH_FAILURE_URL` with a `reason` query parameter.
+- Missing `code` or `state` returns `400`.
+- Missing/mismatched state cookie or missing verifier cookie returns `401`.
+- Missing `GOOGLE_WEB_CLIENT_SECRET` returns `400`.
+- Invalid Google code/token returns `401`.
+- Employee-only user returns `403`.
+- External domain or unverified Google email returns `403`.
+- Inactive or unprovisioned user returns `401`.
+
+#### GET `/api/v1/web/auth/session`
+
+Requires either:
+
+```http
+Cookie: attendance_web_access=<jwt>
+```
+
+or, for low-level API tests:
+
+```http
+Authorization: Bearer {{webAccessToken}}
+```
+
+Expected `200`:
 
 ```json
 {
-  "googleToken": "<google-id-token>"
+  "success": true,
+  "data": {
+    "user": {
+      "id": "<uuid>",
+      "email": "qa.manager@b2winfotech.ai",
+      "roles": ["EMPLOYEE", "MANAGER"],
+      "portal": "WEB"
+    }
+  }
 }
 ```
 
-Expected `200`, message `Login successful`, with `accessToken`, `refreshToken`, and `user`.
+QA checks:
 
-Positive checks:
-
-- Manager can log into web.
-- Admin can log into web.
-
-Negative checks:
-
-- Employee-only user returns `403` with web portal role rejection.
-- Missing or invalid token returns `400` or `401`.
-- External domain returns `403`.
-- Inactive or unprovisioned user returns `401`.
+- Valid web access cookie returns the session payload.
+- Expired access cookie returns `401`.
+- Mobile access token/cookie returns `403` portal mismatch.
+- Inactive user behind a previously issued token returns `401`.
 
 #### POST `/api/v1/web/auth/refresh`
 
-Same contract as mobile refresh, but produces a web portal access token.
+Cookie-based body:
+
+```http
+Cookie: attendance_web_refresh=<opaque-refresh-token>
+```
+
+Expected `200` with `data: null`. New `attendance_web_access` and `attendance_web_refresh` cookies are set.
+
+For low-level API tests, the endpoint also accepts the legacy body shape:
+
+```json
+{
+  "refreshToken": "{{webRefreshToken}}"
+}
+```
+
+QA checks:
+
+- Old refresh token is revoked and cannot be reused.
+- New refresh token cookie works once.
+- Missing refresh token returns `401`.
+- Expired, malformed, revoked, or tampered refresh token returns `401`.
+- Refresh token preserves original portal.
 
 #### POST `/api/v1/web/auth/logout`
 
-Same contract as mobile logout.
+Cookie-based request:
+
+```http
+Cookie: attendance_web_refresh=<opaque-refresh-token>
+```
+
+Expected `200`, message `Logged out`, `data: null`.
+
+QA checks:
+
+- Refresh token is revoked when present.
+- `attendance_web_access` and `attendance_web_refresh` are cleared.
+- Missing/malformed refresh token still returns success by design, making logout idempotent.
 
 ## 6. Mobile Employee API
 
@@ -760,8 +874,10 @@ QA checks:
 All routes in this section require:
 
 ```http
-Authorization: Bearer {{webAccessToken}}
+Cookie: attendance_web_access=<jwt>
 ```
+
+For low-level API tests, `Authorization: Bearer {{webAccessToken}}` is also accepted.
 
 Using a mobile token should return `403`. Employee-only web access should return `403`.
 
@@ -1571,12 +1687,15 @@ Run these against at least one protected mobile route and one protected web rout
 
 | Case | Expected |
 |---|---|
-| No `Authorization` header | `401`, `UNAUTHORIZED` |
-| Header not starting with `Bearer ` | `401`, `UNAUTHORIZED` |
+| Mobile route with no `Authorization` header | `401`, `UNAUTHORIZED` |
+| Web route with neither `Authorization` nor `attendance_web_access` cookie | `401`, `UNAUTHORIZED` |
+| Header not starting with `Bearer ` and no valid web access cookie | `401`, `UNAUTHORIZED` |
 | Expired access token | `401`, `UNAUTHORIZED` |
+| Expired `attendance_web_access` cookie | `401`, `UNAUTHORIZED`; refresh should be tested separately |
 | Tampered JWT | `401`, `UNAUTHORIZED` |
 | Mobile token on web route | `403`, portal access error |
 | Web token on mobile route | `403`, portal access error |
+| Mobile token stored in `attendance_web_access` cookie on web route | `403`, portal access error |
 | Employee-only user on web route | `403`, insufficient/web role error |
 | Manager on admin-only holiday mutation | `403`, insufficient role |
 | Invalid enum in validated query/body | `400`, validation details |
@@ -1606,9 +1725,11 @@ Validation coverage note:
 | POST | `/api/v1/mobile/auth/refresh` | none | 200 |
 | POST | `/api/v1/mobile/auth/logout` | none | 200 |
 | POST | `/api/v1/mobile/auth/device-change-request` | none | 200 |
-| POST | `/api/v1/web/auth/google/login` | none | 200 |
-| POST | `/api/v1/web/auth/refresh` | none | 200 |
-| POST | `/api/v1/web/auth/logout` | none | 200 |
+| GET | `/api/v1/web/auth/google/start` | none | 302 |
+| GET | `/api/v1/web/auth/google/callback` | OAuth cookies/query | 302 |
+| GET | `/api/v1/web/auth/session` | web cookie or bearer | 200 |
+| POST | `/api/v1/web/auth/refresh` | web refresh cookie or body token | 200 |
+| POST | `/api/v1/web/auth/logout` | optional web refresh cookie/body token | 200 |
 
 ### Mobile protected
 
@@ -1667,7 +1788,7 @@ Validation coverage note:
 Before approving a release, QA should complete and record evidence for:
 
 - Health endpoint returns `200`.
-- Web login works for manager and admin.
+- Web OAuth start/callback login works for manager and admin and sets session cookies.
 - Mobile login works for employee and binds first device.
 - Refresh token rotates and old refresh token is rejected.
 - Portal mismatch is rejected both directions.
