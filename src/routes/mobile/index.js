@@ -23,6 +23,7 @@ import * as leavesController from "../../modules/leaves/leaves.controller.js";
 import {
   createLeaveRequestSchema,
   leaveThreadMessageSchema,
+  listMyLeaveRequestsQuerySchema,
 } from "../../modules/leaves/leaves.schemas.js";
 import * as deviceChangesController from "../../modules/device-changes/device-changes.controller.js";
 import {
@@ -91,7 +92,11 @@ router.post(
   attendanceController.punchOut,
 );
 // Leave requests
-router.get("/me/leave-requests", leavesController.getMyLeaveRequests);
+router.get(
+  "/me/leave-requests",
+  validate(listMyLeaveRequestsQuerySchema, "query"),
+  leavesController.getMyLeaveRequests,
+);
 router.get(
   "/me/leave-requests/:leaveRequestId/thread",
   leavesController.getMyLeaveRequestThread,

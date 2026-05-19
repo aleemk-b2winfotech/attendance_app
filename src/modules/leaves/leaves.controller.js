@@ -6,13 +6,8 @@ export async function createLeaveRequest(req, res) {
     sendCreated(res, result, 'Leave request created');
 }
 export async function getMyLeaveRequests(req, res) {
-    // Manual parsing remains here since mobile endpoint doesn't have validation wired
-    const filters = {
-        status: req.query.status,
-        page: Number(req.query.page) || 1,
-        limit: Number(req.query.limit) || 20,
-    };
-    const result = await leavesService.getMyLeaveRequests(req.user.sub, filters);
+    // Query is validated by middleware (page/limit are already numbers).
+    const result = await leavesService.getMyLeaveRequests(req.user.sub, req.query);
     sendSuccess(res, result.items, result.meta);
 }
 export async function cancelLeaveRequest(req, res) {

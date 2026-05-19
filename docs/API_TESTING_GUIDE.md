@@ -720,12 +720,16 @@ Query parameters:
 | Name | Required | Values |
 |---|---:|---|
 | `status` | no | `PENDING`, `APPROVED`, `REJECTED`, `CANCELLED` |
-| `page` | no | integer, default `1` |
-| `limit` | no | integer, default `20` |
+| `page` | no | integer `>=1`, default `1` |
+| `limit` | no | integer `1..100`, default `20` |
 
 Expected `200`, `data` is a list and `meta` has pagination.
 
-QA note: this mobile list endpoint currently parses query params manually rather than through the shared validation middleware. Include invalid `status`, `page`, and `limit` robustness tests and log any `500` as a defect.
+QA checks:
+
+- Invalid `status` values return `400`.
+- Page `0` returns `400`.
+- Limit `101` returns `400`.
 
 #### POST `/api/v1/mobile/me/leave-requests`
 

@@ -8,6 +8,7 @@ const optionalTrimmedString = z.preprocess((value) => {
     const trimmed = value.trim();
     return trimmed.length > 0 ? trimmed : undefined;
 }, z.string().optional());
+const leaveStatusSchema = z.enum(['PENDING', 'APPROVED', 'REJECTED', 'CANCELLED']);
 
 export const createLeaveRequestSchema = z.object({
     startDate: dateOnlySchema,
@@ -20,8 +21,13 @@ export const leaveActionSchema = z.object({
 export const leaveRejectSchema = z.object({
     actionNote: z.string().min(1),
 });
+export const listMyLeaveRequestsQuerySchema = z.object({
+    status: leaveStatusSchema.optional(),
+    page: z.coerce.number().int().min(1).default(1),
+    limit: z.coerce.number().int().min(1).max(100).default(20),
+}).strict();
 export const listLeaveRequestsQuerySchema = z.object({
-    status: z.enum(['PENDING', 'APPROVED', 'REJECTED', 'CANCELLED']).optional(),
+    status: leaveStatusSchema.optional(),
     startDate: dateOnlySchema.optional(),
     endDate: dateOnlySchema.optional(),
     search: z.string().optional(),
