@@ -620,6 +620,7 @@ Key fields:
 QA checks:
 
 - Default range starts at current business month start and ends today.
+- `endDate < startDate` returns `400`.
 - If requested end is today or future, aggregate uses yesterday in `appliedEndDate`.
 - Dates before user creation date are excluded from the effective start.
 - Weekly off and holiday days appear correctly.
@@ -1082,6 +1083,7 @@ QA checks:
 - Manager sees direct reports only.
 - Admin scope excludes admins from attendance aggregation.
 - Aggregate counts equal sum of returned page items for the page.
+- `endDate < startDate` returns `400`.
 - Current/future end date is clamped.
 - Search and pagination work together.
 
@@ -1105,6 +1107,7 @@ Expected `200`, row-level attendance list plus pagination and `range`.
 QA checks:
 
 - `endDate < startDate` returns `400`.
+- Invalid `status` values return `400`.
 - Future requested end date is trimmed to today.
 - Current day without summary is omitted.
 - Status filters match expected records.
