@@ -1,9 +1,16 @@
 import { z } from 'zod';
-// Mobile login also needs device identity to enforce bound-device policy.
-export const googleLoginMobileSchema = z.object({
-    googleToken: z.string().min(1),
-    deviceId: z.string().min(1),
-});
+// Flutter-native login supports employee attendance and admin management modes.
+export const googleLoginMobileSchema = z.discriminatedUnion('portal', [
+    z.object({
+        googleToken: z.string().min(1),
+        portal: z.literal('employee'),
+        deviceId: z.string().min(1),
+    }),
+    z.object({
+        googleToken: z.string().min(1),
+        portal: z.literal('admin'),
+    }),
+]);
 export const refreshTokenSchema = z.object({
     refreshToken: z.string().min(1),
 });

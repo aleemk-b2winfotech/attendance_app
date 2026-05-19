@@ -72,8 +72,10 @@ function getWebRedirectUrl(_req, type) {
 }
 // Controller layer is intentionally thin: parse request -> service -> standardized response.
 export async function mobileGoogleLogin(req, res) {
-    const { googleToken, deviceId } = req.body;
-    const result = await authService.loginMobile(googleToken, deviceId);
+    const { googleToken, deviceId, portal } = req.body;
+    const result = portal === 'admin'
+        ? await authService.loginWeb(googleToken)
+        : await authService.loginMobile(googleToken, deviceId);
     sendSuccess(res, result, undefined, 'Login successful');
 }
 export async function webGoogleStart(req, res) {
