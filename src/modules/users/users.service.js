@@ -18,6 +18,10 @@ import {
 import { paginate, paginationMeta } from "../../common/pagination.js";
 import { env } from "../../config/env.js";
 
+const managerSummaryRelation = {
+  manager: { select: { id: true, fullName: true } },
+};
+
 function applyRoleFilter(where, role) {
   if (!role) {
     return;
@@ -81,6 +85,68 @@ async function assertValidManager(managerUserId) {
   }
 }
 
+function assertUserUpdateAllowed(callerRoles, callerId, user, data) {
+  if (data.isActive !== undefined) {
+    throw new BadRequestError(
+      "Use the deactivate endpoint to change user active status",
+    );
+  }
+
+  if (!isManagerScoped(callerRoles)) {
+    return;
+  }
+
+  assertDirectReportAccess(callerRoles, callerId, user, "update");
+  if (data.managerUserId !== undefined) {
+    throw new ForbiddenError("Managers cannot reassign manager");
+  }
+}
+
+function assertRequestedRoleUpdateAllowed(
+  callerRoles,
+  currentRole,
+  requestedRole,
+) {
+  if (requestedRole === undefined) {
+    return;
+  }
+
+  assertRoleAssignable(callerRoles, requestedRole);
+  assertRoleCanOnlyGrow(currentRole, requestedRole);
+}
+
+function assertActiveUserForIdentityUpdate(user, data, requestedRole) {
+  const changesIdentity =
+    data.fullName !== undefined || requestedRole !== undefined;
+
+  if (!user.isActive && changesIdentity) {
+    throw new ConflictError("Activate user before changing name or role");
+  }
+}
+
+function resolveManagerUserId(resultingRole, data) {
+  if (resultingRole === Role.ADMIN) {
+    return null;
+  }
+
+  return data.managerUserId;
+}
+
+function buildUserUpdateData(
+  data,
+  requestedRole,
+  resultingRole,
+  managerUserId,
+) {
+  return {
+    ...(data.fullName !== undefined && { fullName: data.fullName }),
+    ...(requestedRole !== undefined && { role: requestedRole }),
+    ...((data.managerUserId !== undefined || resultingRole === Role.ADMIN) && {
+      managerUserId,
+    }),
+  };
+}
+
 /**
  * Lists users visible to caller with optional search/role/activity filters.
  *
@@ -116,7 +182,7 @@ export async function listUsers(callerRoles, callerId, filters) {
         role: true,
         isActive: true,
         managerUserId: true,
-        manager: { select: { id: true, fullName: true } },
+        ...managerSummaryRelation,
         createdAt: true,
       },
       orderBy: { fullName: "asc" },
@@ -171,7 +237,7 @@ export async function createUser(callerRoles, callerId, data) {
       role: requestedRole,
       managerUserId,
     },
-    include: { manager: { select: { id: true, fullName: true } } },
+    include: managerSummaryRelation,
   });
   await prisma.attendanceProfile.create({ data: { userId: user.id } });
   return withEffectiveRoles(user);
@@ -189,34 +255,14 @@ export async function updateUser(callerRoles, callerId, userId, data) {
   const prisma = getPrisma();
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) throw new NotFoundError("User");
-  if (data.isActive !== undefined) {
-    throw new BadRequestError("Use the deactivate endpoint to change user active status");
-  }
-
-  if (isManagerScoped(callerRoles)) {
-    assertDirectReportAccess(callerRoles, callerId, user, "update");
-    if (data.managerUserId !== undefined) {
-      throw new ForbiddenError("Managers cannot reassign manager");
-    }
-  }
 
   const requestedRole = getRequestedRole(data);
-  const changesNameOrRole =
-    data.fullName !== undefined || requestedRole !== undefined;
-  if (!user.isActive && changesNameOrRole) {
-    throw new ConflictError("Activate user before changing name or role");
-  }
-
-  if (requestedRole !== undefined) {
-    assertRoleAssignable(callerRoles, requestedRole);
-    assertRoleCanOnlyGrow(user.role, requestedRole);
-  }
+  assertUserUpdateAllowed(callerRoles, callerId, user, data);
+  assertActiveUserForIdentityUpdate(user, data, requestedRole);
+  assertRequestedRoleUpdateAllowed(callerRoles, user.role, requestedRole);
 
   const resultingRole = requestedRole === undefined ? user.role : requestedRole;
-  const managerUserId =
-    resultingRole === Role.ADMIN
-      ? null
-      : data.managerUserId;
+  const managerUserId = resolveManagerUserId(resultingRole, data);
 
   if (managerUserId) {
     await assertValidManager(managerUserId);
@@ -224,14 +270,8 @@ export async function updateUser(callerRoles, callerId, userId, data) {
 
   const updated = await prisma.user.update({
     where: { id: userId },
-    data: {
-      ...(data.fullName !== undefined && { fullName: data.fullName }),
-      ...(requestedRole !== undefined && { role: requestedRole }),
-      ...((data.managerUserId !== undefined || resultingRole === Role.ADMIN) && {
-        managerUserId,
-      }),
-    },
-    include: { manager: { select: { id: true, fullName: true } } },
+    data: buildUserUpdateData(data, requestedRole, resultingRole, managerUserId),
+    include: managerSummaryRelation,
   });
   return withEffectiveRoles(updated);
 }
@@ -257,7 +297,7 @@ export async function deactivateUser(callerRoles, callerId, userId) {
     const deactivatedUser = await tx.user.update({
       where: { id: userId },
       data: { isActive: false },
-      include: { manager: { select: { id: true, fullName: true } } },
+      include: managerSummaryRelation,
     });
 
     await tx.refreshToken.updateMany({
@@ -290,7 +330,7 @@ export async function activateUser(callerRoles, callerId, userId) {
   const updated = await prisma.user.update({
     where: { id: userId },
     data: { isActive: true },
-    include: { manager: { select: { id: true, fullName: true } } },
+    include: managerSummaryRelation,
   });
 
   return withEffectiveRoles(updated);
