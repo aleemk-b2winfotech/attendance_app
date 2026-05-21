@@ -194,7 +194,7 @@ export async function listHolidays(filters) {
     }
     return prisma.holiday.findMany({
         where,
-        orderBy: { startDate: 'asc' },
+        orderBy: { startDate: 'desc' },
         include: {
             createdBy: { select: { id: true, fullName: true } },
             updatedBy: { select: { id: true, fullName: true } },

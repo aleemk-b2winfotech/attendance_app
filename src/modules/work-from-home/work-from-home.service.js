@@ -324,7 +324,7 @@ export async function listWorkFromHomeDays(callerRoles, callerId, filters) {
     prisma.workFromHomeDay.count({ where }),
     prisma.workFromHomeDay.findMany({
       where,
-      orderBy: [{ attendanceDate: "asc" }, { createdAt: "desc" }],
+      orderBy: [{ attendanceDate: "desc" }, { createdAt: "desc" }],
       include: {
         user: {
           select: { id: true, fullName: true, email: true },
