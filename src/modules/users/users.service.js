@@ -201,6 +201,12 @@ export async function updateUser(callerRoles, callerId, userId, data) {
   }
 
   const requestedRole = getRequestedRole(data);
+  const changesNameOrRole =
+    data.fullName !== undefined || requestedRole !== undefined;
+  if (!user.isActive && changesNameOrRole) {
+    throw new ConflictError("Activate user before changing name or role");
+  }
+
   if (requestedRole !== undefined) {
     assertRoleAssignable(callerRoles, requestedRole);
     assertRoleCanOnlyGrow(user.role, requestedRole);

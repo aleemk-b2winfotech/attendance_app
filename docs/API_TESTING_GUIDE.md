@@ -1017,6 +1017,7 @@ QA checks:
 - Role can be promoted but not downgraded.
 - Caller cannot assign role higher than their own.
 - Updating user to `ADMIN` clears manager.
+- Inactive users cannot have name or role changed; activate them first.
 - Including `isActive` returns `400`; use the dedicated active-status endpoints.
 
 #### PATCH `/api/v1/web/users/:userId/deactivate`
