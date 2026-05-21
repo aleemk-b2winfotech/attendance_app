@@ -93,6 +93,11 @@ router.patch(
   requireRoles(Role.MANAGER, Role.ADMIN),
   usersController.deactivateUser,
 );
+router.patch(
+  "/users/:userId/activate",
+  requireRoles(Role.MANAGER, Role.ADMIN),
+  usersController.activateUser,
+);
 // Attendance profiles
 router.get(
   "/users/:userId/attendance-profile",

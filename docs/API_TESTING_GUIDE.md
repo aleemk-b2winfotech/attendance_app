@@ -1004,8 +1004,7 @@ Body can include:
 {
   "fullName": "QA Employee Updated",
   "roles": ["EMPLOYEE", "MANAGER"],
-  "managerUserId": "<manager-uuid>",
-  "isActive": true
+  "managerUserId": "<manager-uuid>"
 }
 ```
 
@@ -1018,7 +1017,36 @@ QA checks:
 - Role can be promoted but not downgraded.
 - Caller cannot assign role higher than their own.
 - Updating user to `ADMIN` clears manager.
+- Including `isActive` returns `400`; use the dedicated active-status endpoints.
+
+#### PATCH `/api/v1/web/users/:userId/deactivate`
+
+Roles: `MANAGER`, `ADMIN`
+
+Expected `200`, message `User deactivated`.
+
+QA checks:
+
+- Manager can deactivate direct reports only.
+- Caller cannot deactivate their own user.
+- Caller cannot deactivate a user higher than their own role.
+- Already-inactive user returns `409`.
+- Active refresh tokens for the user are revoked.
 - Inactive user cannot log in.
+
+#### PATCH `/api/v1/web/users/:userId/activate`
+
+Roles: `MANAGER`, `ADMIN`
+
+Expected `200`, message `User activated`.
+
+QA checks:
+
+- Manager can activate direct reports only.
+- Caller cannot activate a user higher than their own role.
+- Already-active user returns `409`.
+- Revoked sessions are not restored; the user must log in again.
+- Reactivated user can log in.
 
 ### 7.3 Attendance profiles
 

@@ -17,6 +17,10 @@ export async function deactivateUser(req, res) {
     const user = await usersService.deactivateUser(req.user.roles, req.user.sub, req.params.userId);
     sendSuccess(res, user, undefined, 'User deactivated');
 }
+export async function activateUser(req, res) {
+    const user = await usersService.activateUser(req.user.roles, req.user.sub, req.params.userId);
+    sendSuccess(res, user, undefined, 'User activated');
+}
 export async function getAttendanceProfile(req, res) {
     const profile = await usersService.getAttendanceProfile(req.user.roles, req.user.sub, req.params.userId);
     sendSuccess(res, profile);
