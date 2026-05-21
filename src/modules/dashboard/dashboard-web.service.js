@@ -8,6 +8,7 @@ import {
   toDateString,
   isManagerScoped,
   appendNonAdminUserFilter,
+  buildManagerScopeUserWhere,
 } from "../../common/index.js";
 import {
   buildHolidayDateSet,
@@ -61,7 +62,7 @@ export async function getWebDashboard(
   const pendingDeviceChangeCount = await prisma.deviceChangeRequest.count({
     where: {
       status: DeviceChangeStatus.PENDING,
-      user: userWhere,
+      ...buildManagerScopeUserWhere(callerRoles, callerId),
     },
   });
 
