@@ -1,8 +1,16 @@
 import { z } from 'zod';
 import { Role } from '@prisma/client';
+
+const fullNameSchema = z
+    .string()
+    .trim()
+    .min(1)
+    .max(120)
+    .regex(/[A-Za-z]/, 'Full name must contain at least one letter');
+
 // Email is normalized to lowercase before persistence/lookup.
 export const createUserSchema = z.object({
-    fullName: z.string().min(1).max(120),
+    fullName: fullNameSchema,
     email: z.string().email().max(150).transform((v) => v.toLowerCase()),
     roles: z.array(z.nativeEnum(Role)).min(1).optional(),
     role: z.nativeEnum(Role).nullable().optional(),
@@ -11,7 +19,7 @@ export const createUserSchema = z.object({
     message: 'roles or role is required',
 });
 export const updateUserSchema = z.object({
-    fullName: z.string().min(1).max(120).optional(),
+    fullName: fullNameSchema.optional(),
     roles: z.array(z.nativeEnum(Role)).min(1).optional(),
     role: z.nativeEnum(Role).nullable().optional(),
     managerUserId: z.string().uuid().nullable().optional(),
