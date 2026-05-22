@@ -46,6 +46,7 @@ import {
   workFromHomeRangesSchema,
 } from "../../modules/work-from-home/work-from-home.schemas.js";
 import * as dashboardController from "../../modules/dashboard/dashboard.controller.js";
+import { webDashboardQuerySchema } from "../../modules/dashboard/dashboard.schemas.js";
 import { Portal, Role } from "@prisma/client";
 const router = Router();
 // Public auth endpoints (login / refresh / logout).
@@ -67,6 +68,7 @@ router.get("/me/profile", usersController.getMyProfile);
 router.get(
   "/dashboard/overview",
   requireRoles(Role.MANAGER, Role.ADMIN),
+  validate(webDashboardQuerySchema, "query"),
   dashboardController.webDashboard,
 );
 // Users

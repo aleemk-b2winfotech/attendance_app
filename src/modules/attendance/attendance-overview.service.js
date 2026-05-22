@@ -284,6 +284,7 @@ export async function getWebAttendanceRecords(callerRoles, callerId, filters) {
     callerRoles,
     callerId,
     filters.search,
+    { excludeAdmins: true },
   );
 
   const users = await prisma.user.findMany({

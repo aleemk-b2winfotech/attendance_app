@@ -30,6 +30,7 @@ export async function getWebDashboard(
   callerId,
   startDate,
   endDate,
+  isActive,
 ) {
   const prisma = getPrisma();
   const today = businessToday();
@@ -40,8 +41,7 @@ export async function getWebDashboard(
 
   // Keep all dashboard counters aligned to the same visible user scope.
   const userWhere = {
-    // We include inactive users in headcount for consistency with user list
-    // but we can filter by isActive if needed in the future.
+    isActive
   };
   appendNonAdminUserFilter(userWhere);
   if (isManagerScoped(callerRoles)) {
