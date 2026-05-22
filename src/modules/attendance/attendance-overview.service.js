@@ -133,7 +133,7 @@ export async function getWebAttendanceOverview(callerRoles, callerId, filters) {
     { excludeAdmins: true },
   );
 
-  const [total, users] = await Promise.all([
+  const [total, users, aggregateUsers] = await Promise.all([
     prisma.user.count({ where }),
     prisma.user.findMany({
       where,
@@ -147,14 +147,22 @@ export async function getWebAttendanceOverview(callerRoles, callerId, filters) {
       skip: (filters.page - 1) * filters.limit,
       take: filters.limit,
     }),
+    prisma.user.findMany({
+      where,
+      select: {
+        id: true,
+        createdAt: true,
+      },
+      orderBy: { fullName: "asc" },
+    }),
   ]);
 
-  const userIds = users.map((user) => user.id);
+  const aggregateUserIds = aggregateUsers.map((user) => user.id);
 
   const [summaries, holidays] = await Promise.all([
     prisma.attendanceSummary.findMany({
       where: {
-        userId: { in: userIds },
+        userId: { in: aggregateUserIds },
         attendanceDate: {
           gte: new Date(effectiveStart),
           lte: new Date(appliedEndDate),
@@ -200,27 +208,48 @@ export async function getWebAttendanceOverview(callerRoles, callerId, filters) {
     };
   });
 
-  const aggregate = {
-    presentDays: items.reduce((sum, item) => sum + item.summary.presentDays, 0),
-    halfDays: items.reduce((sum, item) => sum + item.summary.halfDays, 0),
-    absentDays: items.reduce((sum, item) => sum + item.summary.absentDays, 0),
-    leaveDays: items.reduce((sum, item) => sum + item.summary.leaveDays, 0),
-    holidayDays: items.reduce((sum, item) => sum + item.summary.holidayDays, 0),
-    weeklyOffDays: items.reduce(
-      (sum, item) => sum + item.summary.weeklyOffDays,
-      0,
-    ),
-    totalWorkedMinutes: items.reduce(
-      (sum, item) => sum + item.summary.totalWorkedMinutes,
-      0,
-    ),
-    attendancePercentage: 0,
+  const aggregateTotals = {
+    presentDays: 0,
+    halfDays: 0,
+    absentDays: 0,
+    totalWorkedMinutes: 0,
   };
+  for (const user of aggregateUsers) {
+    const userSummaries = summariesByUserId.get(user.id) || new Map();
+    const userCreatedDate = user.createdAt
+      ? toDateString(user.createdAt)
+      : null;
+    const stats = computeUserAttendanceStats(
+      dates,
+      userSummaries,
+      holidayMap,
+      FULL_DAY_MINUTES,
+      userCreatedDate,
+      true,
+    );
 
-  const workingDays = aggregate.presentDays + aggregate.halfDays + aggregate.absentDays;
-  aggregate.attendancePercentage = workingDays > 0
-    ? Math.round((aggregate.totalWorkedMinutes / (workingDays * FULL_DAY_MINUTES)) * 10000) / 100
-    : 0;
+    aggregateTotals.presentDays += stats.presentDays;
+    aggregateTotals.halfDays += stats.halfDays;
+    aggregateTotals.absentDays += stats.absentDays;
+    aggregateTotals.totalWorkedMinutes += stats.totalWorkedMinutes;
+  }
+
+  const workingDays =
+    aggregateTotals.presentDays +
+    aggregateTotals.halfDays +
+    aggregateTotals.absentDays;
+  const aggregate = {
+    presentDays: aggregateTotals.presentDays,
+    halfDays: aggregateTotals.halfDays,
+    absentDays: aggregateTotals.absentDays,
+    attendancePercentage: workingDays > 0
+      ? Math.round(
+        (aggregateTotals.totalWorkedMinutes /
+          (workingDays * FULL_DAY_MINUTES)) *
+            10000,
+      ) / 100
+      : 0,
+  };
 
   return {
     range: {

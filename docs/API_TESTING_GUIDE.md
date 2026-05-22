@@ -1115,7 +1115,7 @@ QA checks:
 
 - Manager sees direct reports only.
 - Admin scope excludes admins from attendance aggregation.
-- Aggregate counts equal sum of returned page items for the page.
+- Aggregate ignores pagination, respects search/filter scope, and stays stable across pages.
 - `endDate < startDate` returns `400`.
 - Current/future end date is clamped.
 - Search and pagination work together.

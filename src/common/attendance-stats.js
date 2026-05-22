@@ -85,7 +85,6 @@ export function aggregateAttendanceStats(
 
   return {
     presentDays: totalPresent + totalHalf,
-    halfDays: totalHalf,
     absentDays: totalAbsent,
     leaveDays: totalLeave,
     holidayDays: totalHoliday,
